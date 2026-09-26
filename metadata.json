@@ -2,5 +2,5 @@
   "name": "درنگ | سامانه تصمیم‌گیری هوشیار",
   "description": "همراه دیجیتال و چک‌لیست پنج ایستگاهی تصمیم‌گیری استراتژیک بر پایه مدل‌های PERIMETERS و SONIC، آموزش و تحلیل پرونده‌های تصمیم",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

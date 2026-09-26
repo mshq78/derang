@@ -17,7 +17,7 @@ export const formatDuration = (seconds: number): string => {
 };
 
 /**
- * Format ISO date string into readable Persian date
+ * Format ISO date string into readable Persian date (Jalali)
  */
 export const formatDisplayDate = (isoString?: string): string => {
   if (!isoString) return 'نامشخص';
@@ -43,17 +43,19 @@ export const truncate = (text: string, maxLen = 60): string => {
 };
 
 /**
- * Escape HTML safe strings
+ * Normalizes Persian and Arabic text for robust search matching:
+ * - trim, lower-case
+ * - converts Arabic ي/ك to Persian ی/ک
+ * - replaces zero-width non-joiner (U+200C) with space
+ * - collapses consecutive spaces
  */
-export const sanitize = (str: string): string => {
-  return str.replace(/[&<>"']/g, (m) => {
-    switch (m) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return m;
-    }
-  });
+export const normalizePersianText = (str: string): string => {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/\u200c/g, ' ')
+    .replace(/\s+/g, ' ');
 };

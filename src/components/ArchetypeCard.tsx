@@ -5,23 +5,26 @@ import { ArchetypeDef } from '../types';
 interface ArchetypeCardProps {
   archetype: ArchetypeDef;
   onExploreTest?: () => void;
+  externalTestUrl?: string;
+  externalTestTitle?: string;
+  externalTestSubtitle?: string;
+  externalTestButton?: string;
 }
 
-// Stylized, resilient SVG portraits for each archetype
 const ArchetypePortrait: React.FC<{ id: string; name: string }> = ({ id, name }) => {
   const getColors = () => {
     switch (id) {
       case 'davinci':
-        return { bg: '#fffbeb', primary: '#b45309', accent: '#d97706', initial: 'داوینچی' };
+        return { bg: '#F3ECDD', primary: '#9A7336' };
       case 'lincoln':
-        return { bg: '#eff6ff', primary: '#1d4ed8', accent: '#3b82f6', initial: 'لینکلن' };
+        return { bg: '#E3ECF1', primary: '#3F6E8A' };
       case 'edison':
-        return { bg: '#f0fdf4', primary: '#047857', accent: '#10b981', initial: 'ادیسون' };
+        return { bg: '#E4EFE8', primary: '#4E8A6A' };
       case 'churchill':
-        return { bg: '#fff1f2', primary: '#be123c', accent: '#f43f5e', initial: 'چرچیل' };
+        return { bg: '#F5E5E2', primary: '#A2544E' };
       case 'einstein':
       default:
-        return { bg: '#faf5ff', primary: '#7e22ce', accent: '#a855f7', initial: 'اینشتین' };
+        return { bg: '#ECE8F2', primary: '#6E5F92' };
     }
   };
 
@@ -29,19 +32,18 @@ const ArchetypePortrait: React.FC<{ id: string; name: string }> = ({ id, name })
 
   return (
     <div
-      className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-inner"
+      className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl border border-line shadow-inner"
       style={{ backgroundColor: c.bg }}
     >
-      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-60" />
       <div className="flex flex-col items-center justify-center p-6 text-center z-10">
         <div
-          className="flex h-20 w-20 items-center justify-center rounded-2xl shadow-md border-2 border-white/80"
-          style={{ backgroundColor: c.primary, color: '#ffffff' }}
+          className="flex h-20 w-20 items-center justify-center rounded-2xl shadow-sm border border-line"
+          style={{ backgroundColor: c.primary, color: 'var(--c-canvas)' }}
         >
-          <span className="text-2xl font-black">{name.slice(0, 1)}</span>
+          <span className="text-2xl font-bold">{name.slice(0, 1)}</span>
         </div>
         <span
-          className="mt-3 text-base font-black tracking-tight"
+          className="mt-3 text-base font-bold tracking-tight"
           style={{ color: c.primary }}
         >
           {name}
@@ -51,13 +53,20 @@ const ArchetypePortrait: React.FC<{ id: string; name: string }> = ({ id, name })
   );
 };
 
-export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({ archetype }) => {
+export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({
+  archetype,
+  onExploreTest,
+  externalTestUrl,
+  externalTestTitle,
+  externalTestSubtitle,
+  externalTestButton,
+}) => {
   const [isFlipped, setIsFlipped] = useState(false);
 
   return (
     <div className="w-full flex flex-col gap-4">
       {/* Front / Back Toggle Card */}
-      <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 transition-all">
+      <div className="relative overflow-hidden rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-sm transition-all">
         <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start">
           {/* Portrait frame */}
           <div className="w-36 sm:w-44 flex-shrink-0">
@@ -66,18 +75,18 @@ export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({ archetype }) => {
 
           {/* Details body */}
           <div className="flex-1 text-right w-full">
-            <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
               <div>
-                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                <span className="text-xs font-bold text-primary">
                   {archetype.title}
                 </span>
-                <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
+                <h3 className="text-xl font-bold text-ink">
                   {archetype.name}
                 </h3>
               </div>
               <button
                 onClick={() => setIsFlipped(!isFlipped)}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-colors"
+                className="flex items-center gap-1.5 rounded-xl border border-line bg-surface-2 px-3 py-1.5 text-xs font-bold text-ink hover:bg-line transition-colors"
                 aria-label="مشاهده روی دیگر کارت"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -88,17 +97,17 @@ export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({ archetype }) => {
             {!isFlipped ? (
               <div className="mt-4 space-y-3">
                 <div>
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-success mb-1">
                     <Sparkles className="h-4 w-4" />
                     <span>نقطه قوت بارز تصمیم‌گیری:</span>
                   </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
+                  <p className="text-sm font-medium text-ink-2 leading-relaxed">
                     {archetype.strength}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-slate-50 p-3.5 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-                  <p className="text-xs italic text-slate-600 dark:text-slate-300 leading-relaxed text-right">
+                <div className="rounded-2xl bg-surface-2 p-3.5 border border-line">
+                  <p className="text-sm italic text-ink-2 leading-relaxed text-right">
                     {archetype.quote}
                   </p>
                 </div>
@@ -106,20 +115,20 @@ export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({ archetype }) => {
             ) : (
               <div className="mt-4 space-y-3">
                 <div>
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700 dark:text-rose-400 mb-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-danger mb-1">
                     <AlertTriangle className="h-4 w-4" />
                     <span>روی دیگر نقطه قوت (خطر افراط / سایه):</span>
                   </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
+                  <p className="text-sm font-medium text-ink-2 leading-relaxed">
                     {archetype.shadow}
                   </p>
                 </div>
 
-                <div className="rounded-2xl bg-amber-50/80 p-3.5 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/60">
-                  <span className="text-xs font-bold text-amber-900 dark:text-amber-300 block mb-1">
+                <div className="rounded-2xl bg-warning-soft p-3.5 border border-warning/30">
+                  <span className="text-xs font-bold text-warning-ink block mb-1">
                     پرسش درنگ برای تصمیم شما:
                   </span>
-                  <p className="text-xs font-medium text-amber-800 dark:text-amber-200 leading-relaxed">
+                  <p className="text-sm font-medium text-warning-ink leading-relaxed">
                     {archetype.reflectionQuestion}
                   </p>
                 </div>
@@ -130,22 +139,23 @@ export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({ archetype }) => {
       </div>
 
       {/* External Gera test callout */}
-      <div className="flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50/60 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+      <div className="flex items-center justify-between rounded-2xl border border-line bg-surface-2 px-4 py-3">
         <div className="text-right">
-          <span className="text-xs font-bold text-blue-900 dark:text-blue-300 block">
-            هنوز الگوی تصمیم‌گیری خود را نمی‌دانید؟
+          <span className="text-xs font-bold text-ink block">
+            {externalTestTitle || 'هنوز الگوی تصمیم‌گیری خود را نمی‌دانید؟'}
           </span>
-          <span className="text-[11px] text-blue-700 dark:text-blue-400">
-            می‌توانید آزمون پنج شخصیت را در وب‌سایت پردیس نوآوری گِرا انجام دهید.
+          <span className="text-[13px] text-ink-2">
+            {externalTestSubtitle || 'می‌توانید آزمون پنج شخصیت را در وب‌سایت پردیس نوآوری گِرا انجام دهید.'}
           </span>
         </div>
         <a
-          href="https://test.igera.ir/"
+          href={externalTestUrl || 'https://test.igera.ir/'}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm transition-colors whitespace-nowrap"
+          className="flex items-center gap-1 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm transition-colors whitespace-nowrap"
+          aria-label={`${externalTestButton || 'شروع آزمون گِرا'} (باز شدن در زبانه جدید)`}
         >
-          <span>شروع آزمون گِرا</span>
+          <span>{externalTestButton || 'شروع آزمون گِرا'}</span>
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
       </div>

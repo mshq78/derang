@@ -14,7 +14,8 @@ export type Screen =
   | 'stories'
   | 'challenge'
   | 'book'
-  | 'farewell';
+  | 'farewell'
+  | 'admin';
 
 export type AnswerValue = 'yes' | 'no' | 'unknown';
 
@@ -46,6 +47,7 @@ export interface AppSettings {
   sound: boolean;
   motion: boolean;
   highContrast: boolean;
+  theme: 'light' | 'dark';
 }
 
 export interface QuestionDef {
@@ -73,6 +75,7 @@ export interface ArchetypeDef {
   quote: string;
   color: string;
   avatarSeed: string;
+  imageUrl?: string;
 }
 
 export interface AudioStoryDef {
@@ -85,6 +88,8 @@ export interface AudioStoryDef {
   desc: string;
   transcript: string;
   takeaway: string;
+  audioUrl?: string;
+  coverUrl?: string;
 }
 
 export interface ChallengeDef {
@@ -102,3 +107,5 @@ export interface BookQADef {
   ref: string;
   category: string;
 }
+
+export type LibraryFilter = 'all' | 'audio' | 'video' | 'book' | 'practice';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   PlusCircle,
   ArrowRight,
@@ -7,7 +7,6 @@ import {
   XCircle,
   HelpCircle,
   Compass,
-  Sparkles,
   BookOpen,
   Volume2,
   Video,
@@ -15,15 +14,16 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
-  ExternalLink,
   ShieldAlert,
   Calendar,
   AlertTriangle,
   FolderOpen,
   Award,
-  RefreshCw,
   Printer,
   Clock,
+  MoreVertical,
+  Edit,
+  Trash2,
 } from 'lucide-react';
 
 import {
@@ -32,20 +32,34 @@ import {
   DecisionRecord,
   UserProfile,
   AppSettings,
+  LibraryFilter,
 } from './types';
 import {
-  STATIONS,
-  QUESTIONS,
-  PERIMETERS,
-  SKILLS,
-  SONIC,
-  PEOPLE,
-  AUDIO_STORIES,
-  BOOK_QA,
-  CHALLENGES,
+  STATIONS as DEFAULT_STATIONS,
+  QUESTIONS as DEFAULT_QUESTIONS,
+  PERIMETERS as DEFAULT_PERIMETERS,
+  SKILLS as DEFAULT_SKILLS,
+  SONIC as DEFAULT_SONIC,
+  PEOPLE as DEFAULT_PEOPLE,
+  AUDIO_STORIES as DEFAULT_AUDIO_STORIES,
+  BOOK_QA as DEFAULT_BOOK_QA,
+  CHALLENGES as DEFAULT_CHALLENGES,
 } from './data/dorangData';
-import { toPersianDigits, formatDisplayDate, truncate } from './utils/helpers';
+import {
+  toPersianDigits,
+  formatDisplayDate,
+  formatDuration,
+  truncate,
+  normalizePersianText,
+} from './utils/helpers';
+import {
+  isoToJalali,
+  jalaliToIso,
+  JALALI_MONTH_NAMES,
+  getCurrentJalaliDate,
+} from './utils/jalali';
 import { playSoundEffect } from './utils/audioEffects';
+import { ContentProvider, useContent } from './context/ContentContext';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { ArchetypeCard } from './components/ArchetypeCard';
@@ -55,6 +69,8 @@ import { SettingsModal } from './components/SettingsModal';
 import { TourModal } from './components/TourModal';
 import { HelpModal } from './components/HelpModal';
 import { Confetti } from './components/Confetti';
+import { EditDecisionModal } from './components/EditDecisionModal';
+import { AdminPanel } from './components/AdminPanel';
 
 const STORAGE_KEY = 'gera_dorang_unified_v2';
 
@@ -65,10 +81,124 @@ const DEFAULT_SETTINGS: AppSettings = {
   sound: true,
   motion: true,
   highContrast: false,
+  theme: 'light',
 };
 
-export default function App() {
-  // State Initialization with LocalStorage
+const DEFAULT_LEARNING_STEPS = [
+  { id: 'why', title: '۱. چرا اصلاً به «درنگ» نیاز داریم؟', desc: 'کالبدشکافی نقاط کور، نقاط ناشنوا و نقاط لال.', screen: 'why' as Screen },
+  { id: 'perimeters', title: '۲. ده دام پنهان در مدل PERIMETERS', desc: 'از قدرت و ایگو تا هویت و داستان‌سرایی؛ ابزار تشخیص سوگیری‌ها.', screen: 'perimeters' as Screen },
+  { id: 'skills', title: '۳. هفت شایستگی رهبری هوشیار', desc: 'شایستگی‌های رفتار تصمیم‌گیرنده: ذهن باز، واقعیت‌سنجی، شنیدن مخالف.', screen: 'skills' as Screen },
+  { id: 'sonic', title: '۴. ابزارهای پنج‌گانه SONIC در لحظه', desc: 'تکنیک‌های ۵ چرا، حذف فرضی گزینه اول، آزمون احتمال و اصطکاک تصمیم.', screen: 'sonic' as Screen },
+  { id: 'people', title: '۵. پنج الگوی تصمیم‌گیری (شخصیت‌ها)', desc: 'داوینچی، لینکلن، ادیسون، چرچیل و اینشتین؛ نقطه قوت و روی دیگر آن.', screen: 'people' as Screen },
+  { id: 'stories', title: '۶. روایت‌ها و عبرت‌های زنده', desc: 'ماجرای تایتان، اصفهان، ترابانت، پالو آلتو و ویدئوی شاه سلطان حسین.', screen: 'stories' as Screen },
+  { id: 'challenge', title: '۷. چالش‌های کشف و تمرین تعاملی', desc: 'سنجش موقعیت‌های واقعی، تشخیص دام و دریافت بازخورد سازنده.', screen: 'challenge' as Screen },
+];
+
+function DerangApp() {
+  const { content } = useContent();
+
+  // Dynamic content mapping with fallback to bundled defaults
+  const STATIONS = useMemo(() => {
+    const pub = content.stations.filter((s) => s.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_STATIONS;
+  }, [content.stations]);
+
+  const QUESTIONS = useMemo(() => {
+    const pub = content.questions.filter((q) => q.isPublished);
+    if (pub.length > 0) {
+      const idToIdx = new Map(content.stations.map((s, i) => [s.id, i]));
+      return pub.map((q) => ({
+        id: q.id,
+        station: idToIdx.get(q.stationId) ?? 0,
+        text: q.text,
+        help: q.help,
+        exercise: q.exercise,
+        critical: q.critical,
+      }));
+    }
+    return DEFAULT_QUESTIONS;
+  }, [content.questions, STATIONS]);
+
+  const PERIMETERS = useMemo(() => {
+    const pub = content.perimeters.filter((p) => p.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_PERIMETERS;
+  }, [content.perimeters]);
+
+  const SKILLS = useMemo(() => {
+    const pub = content.skills.filter((s) => s.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_SKILLS;
+  }, [content.skills]);
+
+  const SONIC = useMemo(() => {
+    const pub = content.sonic.filter((s) => s.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_SONIC;
+  }, [content.sonic]);
+
+  const PEOPLE = useMemo(() => {
+    const pub = content.people.filter((p) => p.isPublished);
+    if (pub.length > 0) {
+      const res: Record<string, import('./types').ArchetypeDef> = {};
+      pub.forEach((p) => {
+        res[p.id] = {
+          id: p.id,
+          name: p.name,
+          title: p.title,
+          strength: p.strength,
+          shadow: p.shadow,
+          reflectionQuestion: p.reflectionQuestion,
+          quote: p.quote,
+          color: `${p.colorBg} ${p.colorPrimary}`,
+          avatarSeed: p.id,
+          imageUrl: p.imageUrl,
+        };
+      });
+      return res;
+    }
+    return DEFAULT_PEOPLE;
+  }, [content.people]);
+
+  const AUDIO_STORIES = useMemo(() => {
+    const pub = content.audioStories.filter((a) => a.isPublished);
+    if (pub.length > 0) {
+      return pub.map((a) => ({
+        key: a.id,
+        title: a.title,
+        subtitle: a.subtitle,
+        dur: toPersianDigits(formatDuration(a.durationSeconds)),
+        seconds: a.durationSeconds,
+        tags: a.tags,
+        desc: a.desc,
+        transcript: a.transcript,
+        takeaway: a.takeaway,
+        audioUrl: a.audioUrl,
+        coverUrl: a.coverUrl,
+      }));
+    }
+    return DEFAULT_AUDIO_STORIES;
+  }, [content.audioStories]);
+
+  const BOOK_QA = useMemo(() => {
+    const pub = content.bookQA.filter((b) => b.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_BOOK_QA;
+  }, [content.bookQA]);
+
+  const CHALLENGES = useMemo(() => {
+    const pub = content.challenges.filter((c) => c.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_CHALLENGES;
+  }, [content.challenges]);
+
+  const LEARNING_STEPS = useMemo(() => {
+    const pub = content.learningSteps.filter((l) => l.isPublished);
+    if (pub.length > 0) {
+      return pub.map((l) => ({
+        id: l.id,
+        title: l.title,
+        desc: l.desc,
+        screen: l.screen as Screen,
+      }));
+    }
+    return DEFAULT_LEARNING_STEPS;
+  }, [content.learningSteps]);
   const [profile, setProfile] = useState<UserProfile>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -77,7 +207,7 @@ export default function App() {
         if (parsed.profile) return parsed.profile;
       }
     } catch {
-      // Ignore
+      // ignore
     }
     return { first: '', last: '' };
   });
@@ -87,10 +217,10 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.settings) return { ...DEFAULT_SETTINGS, ...parsed.settings };
+        if (parsed.settings) return { ...DEFAULT_SETTINGS, ...parsed.settings, theme: parsed.settings.theme || 'light' };
       }
     } catch {
-      // Ignore
+      // ignore
     }
     return DEFAULT_SETTINGS;
   });
@@ -103,7 +233,7 @@ export default function App() {
         if (Array.isArray(parsed.decisions)) return parsed.decisions;
       }
     } catch {
-      // Ignore
+      // ignore
     }
     return [];
   });
@@ -116,7 +246,7 @@ export default function App() {
         if (parsed.activeDecisionId) return parsed.activeDecisionId;
       }
     } catch {
-      // Ignore
+      // ignore
     }
     return null;
   });
@@ -129,7 +259,7 @@ export default function App() {
         if (Array.isArray(parsed.learningDone)) return parsed.learningDone;
       }
     } catch {
-      // Ignore
+      // ignore
     }
     return [];
   });
@@ -139,41 +269,68 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.unlockedArchetypes)) return parsed.unlockedArchetypes;
+        if (Array.isArray(parsed.unlockedArchetypes) && parsed.unlockedArchetypes.length > 0) {
+          return parsed.unlockedArchetypes;
+        }
       }
     } catch {
-      // Ignore
+      // ignore
     }
     return ['davinci'];
+  });
+
+  const [challengeCorrectCount, setChallengeCorrectCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.challengeCorrectCount === 'number') return parsed.challengeCorrectCount;
+      }
+    } catch {
+      // ignore
+    }
+    return 0;
+  });
+
+  const [answeredChallenges, setAnsweredChallenges] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed.answeredChallenges)) return parsed.answeredChallenges;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
   });
 
   const [screen, setScreen] = useState<Screen>('home');
   const [questionIndex, setQuestionIndex] = useState(0);
   const [activeArchetype, setActiveArchetype] = useState('davinci');
-  const [libraryFilter, setLibraryFilter] = useState<'all' | 'audio' | 'video' | 'poster' | 'book' | 'practice'>('all');
+  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>('all');
   const [librarySearch, setLibrarySearch] = useState('');
   const [openBookIndex, setOpenBookIndex] = useState<number | null>(null);
 
-  // Challenge Quiz state
+  // Challenge State
   const [challengeIndex, setChallengeIndex] = useState(0);
   const [challengeAnswered, setChallengeAnswered] = useState(false);
   const [selectedChallengeOption, setSelectedChallengeOption] = useState<number | null>(null);
-  const [challengeCorrectCount, setChallengeCorrectCount] = useState(0);
   const [showConfetti, setShowConfetti] = useState(false);
 
-  // Modals state
+  // Modals & Feedback
   const [activeModal, setActiveModal] = useState<'none' | 'help' | 'settings' | 'tour' | 'video'>('none');
+  const [editingDecision, setEditingDecision] = useState<DecisionRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // New Decision Form state
+  // New Decision Form State
   const [newTitle, setNewTitle] = useState('');
   const [newProblem, setNewProblem] = useState('');
   const [newWhy, setNewWhy] = useState('');
-
-  // Active question hint state
   const [activeQuestionHint, setActiveQuestionHint] = useState<'none' | 'help' | 'exercise'>('none');
 
-  // Sync to LocalStorage
+  // Persistence effect
   useEffect(() => {
     try {
       const payload = {
@@ -183,26 +340,59 @@ export default function App() {
         activeDecisionId,
         learningDone,
         unlockedArchetypes,
+        challengeCorrectCount,
+        answeredChallenges,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
-      // Storage might be full
+      // Storage unavailable
     }
-  }, [profile, settings, decisions, activeDecisionId, learningDone, unlockedArchetypes]);
+  }, [
+    profile,
+    settings,
+    decisions,
+    activeDecisionId,
+    learningDone,
+    unlockedArchetypes,
+    challengeCorrectCount,
+    answeredChallenges,
+  ]);
 
-  // Apply styling settings
+  // Apply theme & font settings
   useEffect(() => {
     document.documentElement.style.setProperty('--font-scale', String(settings.font));
+    if (settings.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
     if (settings.highContrast) {
       document.documentElement.classList.add('high-contrast');
     } else {
       document.documentElement.classList.remove('high-contrast');
     }
-  }, [settings.font, settings.highContrast]);
+
+    if (!settings.motion) {
+      document.documentElement.classList.add('reduce-motion');
+    } else {
+      document.documentElement.classList.remove('reduce-motion');
+    }
+  }, [settings.font, settings.theme, settings.highContrast, settings.motion]);
+
+  // Clean toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   const showToast = (msg: string) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setToastMessage(msg);
-    setTimeout(() => {
+    toastTimeoutRef.current = setTimeout(() => {
       setToastMessage(null);
     }, 2400);
   };
@@ -223,48 +413,46 @@ export default function App() {
     }
   };
 
-  // Next recommended learning step
   const nextLearningStep = useMemo(() => {
-    const sequence = [
-      { id: 'why', title: 'چرا قضاوت خطا می‌کند؟', screen: 'why' as Screen },
-      { id: 'perimeters', title: 'ده دام مدل PERIMETERS', screen: 'perimeters' as Screen },
-      { id: 'skills', title: 'هفت شایستگی رهبری هوشیار', screen: 'skills' as Screen },
-      { id: 'sonic', title: 'ابزارهای پنج‌گانه SONIC', screen: 'sonic' as Screen },
-      { id: 'people', title: 'پنج الگوی تصمیم‌گیری', screen: 'people' as Screen },
-      { id: 'stories', title: 'روایت‌ها و تجارب واقعی', screen: 'stories' as Screen },
-      { id: 'challenge', title: 'چالش‌های کشف و بازخورد', screen: 'challenge' as Screen },
-    ];
-    return sequence.find((s) => !learningDone.includes(s.id)) || sequence[sequence.length - 1];
+    return LEARNING_STEPS.find((s) => !learningDone.includes(s.id)) || LEARNING_STEPS[LEARNING_STEPS.length - 1];
   }, [learningDone]);
 
-  // Profile submission handler
+  // Count answered questions (only yes, no, unknown)
+  const getAnsweredCount = (d: DecisionRecord) => {
+    return Object.values(d.answers || {}).filter(
+      (a) => a.value === 'yes' || a.value === 'no' || a.value === 'unknown'
+    ).length;
+  };
+
+  const getFirstUnansweredIndex = (d: DecisionRecord) => {
+    const idx = QUESTIONS.findIndex(
+      (q) => !d.answers[q.id] || !d.answers[q.id].value
+    );
+    return idx === -1 ? 0 : idx;
+  };
+
   const handleProfileSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
     const firstInput = form.elements.namedItem('first') as HTMLInputElement;
     const lastInput = form.elements.namedItem('last') as HTMLInputElement;
-
     const first = firstInput?.value.trim() || '';
     const last = lastInput?.value.trim() || '';
-
     if (!first) {
       showToast('لطفاً نام خود را وارد کنید.');
       return;
     }
-
     setProfile({ first, last });
     playSoundEffect('enter', settings.sound, settings.fxVolume);
     showToast(`${first} عزیز، به درنگ خوش آمدید!`);
   };
 
-  // Create Decision
   const handleCreateDecision = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newProblem.trim()) {
       showToast('عنوان و صورت مسئله الزامی است.');
       return;
     }
-
     const newRecord: DecisionRecord = {
       id: `d_${Date.now()}`,
       title: newTitle.trim(),
@@ -273,7 +461,6 @@ export default function App() {
       created: new Date().toISOString(),
       answers: {},
     };
-
     setDecisions((prev) => [newRecord, ...prev]);
     setActiveDecisionId(newRecord.id);
     setQuestionIndex(0);
@@ -285,12 +472,27 @@ export default function App() {
     handleNavigate('question');
   };
 
-  // Answer question
+  const handleSaveEditedDecision = (id: string, title: string, problem: string, why?: string) => {
+    setDecisions((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, title, problem, why } : d))
+    );
+    showToast('پرونده با موفقیت ویرایش شد.');
+  };
+
+  const handleDeleteDecision = (id: string) => {
+    if (window.confirm('این پرونده برای همیشه حذف شود؟')) {
+      setDecisions((prev) => prev.filter((d) => d.id !== id));
+      if (activeDecisionId === id) {
+        setActiveDecisionId(null);
+      }
+      showToast('پرونده حذف شد.');
+    }
+  };
+
   const handleAnswerQuestion = (val: AnswerValue) => {
     if (!activeDecisionId) return;
     const q = QUESTIONS[questionIndex];
     playSoundEffect('tap', settings.sound, settings.fxVolume);
-
     setDecisions((prev) =>
       prev.map((d) => {
         if (d.id === activeDecisionId) {
@@ -311,7 +513,6 @@ export default function App() {
     );
   };
 
-  // Question Note
   const handleUpdateNote = (noteText: string) => {
     if (!activeDecisionId) return;
     const q = QUESTIONS[questionIndex];
@@ -335,32 +536,39 @@ export default function App() {
     );
   };
 
-  // Challenge answer handler
   const handleChallengeAnswer = (optionIdx: number) => {
     if (challengeAnswered) return;
     const currentChallenge = CHALLENGES[challengeIndex % CHALLENGES.length];
     const isCorrect = optionIdx === currentChallenge.ans;
+    const challengeKey = String(challengeIndex);
 
     setSelectedChallengeOption(optionIdx);
     setChallengeAnswered(true);
 
     if (isCorrect) {
       playSoundEffect('win', settings.sound, settings.fxVolume);
-      setShowConfetti(true);
-      setChallengeCorrectCount((prev) => prev + 1);
+      if (settings.motion) {
+        setShowConfetti(true);
+      }
 
-      // Archetype unlock logic
-      const archetypesList = ['davinci', 'lincoln', 'edison', 'churchill', 'einstein'];
-      const nextUnlockIndex = Math.min(
-        archetypesList.length - 1,
-        Math.floor((challengeCorrectCount + 1) / 2)
-      );
-      const toUnlock = archetypesList[nextUnlockIndex];
-      if (toUnlock && !unlockedArchetypes.includes(toUnlock)) {
-        setUnlockedArchetypes((prev) => [...prev, toUnlock]);
-        setTimeout(() => {
-          showToast(`کارت شخصیت «${PEOPLE[toUnlock].name}» در مجموعه شما باز شد!`);
-        }, 600);
+      // Only award points on the first correct answer
+      if (!answeredChallenges.includes(challengeKey)) {
+        setAnsweredChallenges((prev) => [...prev, challengeKey]);
+        const newCount = challengeCorrectCount + 1;
+        setChallengeCorrectCount(newCount);
+
+        // Unlock logic: 1 card per 2 correct answers using Object.keys(PEOPLE)
+        const peopleKeys = Object.keys(PEOPLE);
+        const unlockedCount = 1 + Math.floor(newCount / 2);
+        const newUnlocked = peopleKeys.slice(0, Math.min(peopleKeys.length, unlockedCount));
+
+        if (newUnlocked.length > unlockedArchetypes.length) {
+          setUnlockedArchetypes(newUnlocked);
+          const newlyUnlockedKey = newUnlocked[newUnlocked.length - 1];
+          setTimeout(() => {
+            showToast(`کارت شخصیت «${PEOPLE[newlyUnlockedKey]?.name}» در مجموعه شما باز شد!`);
+          }, 600);
+        }
       }
     } else {
       playSoundEffect('wrong', settings.sound, settings.fxVolume);
@@ -374,7 +582,6 @@ export default function App() {
     setSelectedChallengeOption(null);
   };
 
-  // Backup & Restore handlers
   const handleBackupDownload = () => {
     const data = {
       version: 2,
@@ -382,6 +589,8 @@ export default function App() {
       decisions,
       learningDone,
       unlockedArchetypes,
+      challengeCorrectCount,
+      answeredChallenges,
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -397,20 +606,58 @@ export default function App() {
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
+
+      let restoredCount = 0;
+      let ignoredCount = 0;
+
       if (Array.isArray(parsed.decisions)) {
+        const validDecisions: DecisionRecord[] = [];
+        parsed.decisions.forEach((item: unknown) => {
+          if (
+            item &&
+            typeof item === 'object' &&
+            'id' in item &&
+            'title' in item &&
+            'problem' in item &&
+            'created' in item &&
+            'answers' in item &&
+            typeof (item as DecisionRecord).id === 'string' &&
+            typeof (item as DecisionRecord).title === 'string' &&
+            typeof (item as DecisionRecord).problem === 'string' &&
+            typeof (item as DecisionRecord).created === 'string' &&
+            typeof (item as DecisionRecord).answers === 'object' &&
+            (item as DecisionRecord).answers !== null
+          ) {
+            validDecisions.push(item as DecisionRecord);
+            restoredCount++;
+          } else {
+            ignoredCount++;
+          }
+        });
+
         setDecisions((prev) => {
           const existingIds = new Set(prev.map((d) => d.id));
-          const newOnes = parsed.decisions.filter((d: DecisionRecord) => !existingIds.has(d.id));
+          const newOnes = validDecisions.filter((d) => !existingIds.has(d.id));
           return [...prev, ...newOnes];
         });
       }
+
       if (Array.isArray(parsed.learningDone)) {
         setLearningDone((prev) => [...new Set([...prev, ...parsed.learningDone])]);
       }
-      if (Array.isArray(parsed.unlockedArchetypes)) {
+      if (Array.isArray(parsed.unlockedArchetypes) && parsed.unlockedArchetypes.length > 0) {
         setUnlockedArchetypes((prev) => [...new Set([...prev, ...parsed.unlockedArchetypes])]);
       }
-      showToast('اطلاعات با موفقیت بازیابی شد.');
+      if (typeof parsed.challengeCorrectCount === 'number') {
+        setChallengeCorrectCount(parsed.challengeCorrectCount);
+      }
+      if (Array.isArray(parsed.answeredChallenges)) {
+        setAnsweredChallenges((prev) => [...new Set([...prev, ...parsed.answeredChallenges])]);
+      }
+
+      showToast(
+        `${toPersianDigits(restoredCount)} پرونده بازیابی شد، ${toPersianDigits(ignoredCount)} مورد نامعتبر نادیده گرفته شد.`
+      );
       setActiveModal('none');
     } catch {
       showToast('خطا در خواندن فایل پشتیبان.');
@@ -424,34 +671,87 @@ export default function App() {
       setActiveDecisionId(null);
       setLearningDone([]);
       setUnlockedArchetypes(['davinci']);
+      setChallengeCorrectCount(0);
+      setAnsweredChallenges([]);
+      setQuestionIndex(0);
+      setScreen('home');
       setActiveModal('none');
       showToast('تمام اطلاعات پاک‌سازی شد.');
     }
   };
 
-  // 1. Onboarding Screen if Name not provided
+  // Search filter query normalized
+  const normalizedQuery = normalizePersianText(librarySearch);
+
+  const filteredAudio = useMemo(() => {
+    return AUDIO_STORIES.filter((s) => {
+      if (!normalizedQuery) return true;
+      return (
+        normalizePersianText(s.title).includes(normalizedQuery) ||
+        normalizePersianText(s.desc).includes(normalizedQuery) ||
+        s.tags.some((t) => normalizePersianText(t).includes(normalizedQuery))
+      );
+    });
+  }, [normalizedQuery]);
+
+  const filteredBookQA = useMemo(() => {
+    return BOOK_QA.filter((b) => {
+      if (!normalizedQuery) return true;
+      return (
+        normalizePersianText(b.q).includes(normalizedQuery) ||
+        normalizePersianText(b.a).includes(normalizedQuery) ||
+        normalizePersianText(b.category).includes(normalizedQuery)
+      );
+    });
+  }, [normalizedQuery]);
+
+  const filteredChallenges = useMemo(() => {
+    return CHALLENGES.filter((c) => {
+      if (!normalizedQuery) return true;
+      return (
+        normalizePersianText(c.q).includes(normalizedQuery) ||
+        normalizePersianText(c.type).includes(normalizedQuery)
+      );
+    });
+  }, [normalizedQuery]);
+
+  const videoMatches = useMemo(() => {
+    if (!normalizedQuery) return true;
+    return (
+      normalizePersianText('شاه سلطان حسین؛ هزینه تعلل در تصمیم‌گیری').includes(normalizedQuery) ||
+      normalizePersianText('روایت طنزآمیز و درس‌آموز از پیامدهای ترس از اتخاذ تصمیمات سخت').includes(normalizedQuery)
+    );
+  }, [normalizedQuery]);
+
+  const hasAnyLibraryResults =
+    filteredAudio.length > 0 ||
+    filteredBookQA.length > 0 ||
+    filteredChallenges.length > 0 ||
+    videoMatches;
+
+  // Onboarding View
   if (!profile.first) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-right">
-        <div className="w-full max-w-md rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xl">
+      <div className="flex min-h-screen items-center justify-center bg-canvas p-4 text-right">
+        <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 sm:p-8 shadow-sm">
           <div className="flex flex-col items-center text-center mb-6">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-white font-black text-2xl shadow-lg shadow-blue-500/25 mb-3">
-              د
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-surface font-black text-2xl shadow-sm mb-3">
+              {content.site.brandName.charAt(0) || 'د'}
             </div>
-            <span className="text-xs font-bold text-blue-600 mb-1">
-              پردیس نوآوری گِرا
+            <span className="text-[13px] font-bold text-primary mb-1">
+              {content.site.orgName}
             </span>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              به سامانه «دِرانْـگ» خوش آمدید
+            <h1 className="text-2xl font-extrabold text-ink tracking-tight">
+              {content.site.onboardingTitle}
             </h1>
-            <p className="mt-2 text-xs text-slate-600 leading-relaxed max-w-sm">
-              همراه هوشیار شما برای مکث‌های سرنوشت‌ساز، سنجش سوگیری‌ها و تصمیم‌گیری‌های شفاف و سنجیده.
+            <p className="mt-2 text-sm text-ink-2 leading-relaxed max-w-sm">
+              {content.site.onboardingSubtitle}
             </p>
           </div>
 
           <form onSubmit={handleProfileSubmit} className="space-y-4">
             <div>
-              <label htmlFor="first" className="block text-xs font-bold text-slate-700 mb-1.5">
+              <label htmlFor="first" className="block text-xs font-bold text-ink mb-1.5">
                 نام شما
               </label>
               <input
@@ -461,13 +761,13 @@ export default function App() {
                 required
                 maxLength={40}
                 placeholder="مثلاً: مریم یا آرش"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all text-right"
+                className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-right"
               />
             </div>
 
             <div>
-              <label htmlFor="last" className="block text-xs font-bold text-slate-700 mb-1.5">
-                نام خانوادگی <span className="text-slate-400 font-normal">(اختیاری)</span>
+              <label htmlFor="last" className="block text-xs font-bold text-ink mb-1.5">
+                نام خانوادگی <span className="text-ink-3 font-normal">(اختیاری)</span>
               </label>
               <input
                 id="last"
@@ -475,22 +775,22 @@ export default function App() {
                 type="text"
                 maxLength={50}
                 placeholder="مثلاً: نیک‌بخت"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all text-right"
+                className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-right"
               />
             </div>
 
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-md shadow-blue-500/20 hover:bg-blue-700 active:scale-[0.99] transition-all"
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-surface shadow-sm hover:bg-primary-hover active:scale-[0.99] transition-all"
               >
-                <span>شروع تجربه درنگ</span>
+                <span>شروع تجربه {content.site.brandName}</span>
                 <ArrowLeft className="h-4 w-4" />
               </button>
             </div>
           </form>
 
-          <p className="mt-5 text-center text-[11px] text-slate-400">
+          <p className="mt-5 text-center text-[13px] text-ink-3">
             اطلاعات شما به طور محرمانه در همین دستگاه باقی می‌ماند.
           </p>
         </div>
@@ -498,26 +798,26 @@ export default function App() {
     );
   }
 
-  // 2. Farewell Screen
+  // Farewell View
   if (screen === 'farewell') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4 text-right">
-        <div className="w-full max-w-md rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 text-center shadow-xl">
-          <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 font-bold text-2xl mb-4 border border-emerald-100">
+      <div className="flex min-h-screen items-center justify-center bg-canvas p-4 text-right">
+        <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 sm:p-8 text-center shadow-sm">
+          <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-2xl bg-success-soft text-success font-bold text-2xl mb-4 border border-success/20">
             ✓
           </div>
-          <h2 className="text-xl font-black text-slate-900">
+          <h2 className="text-xl font-bold text-ink">
             {profile.first} عزیز، سپاس از درنگ هوشیارانه امروز شما
           </h2>
-          <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-            تمامی پرونده‌ها و یادداشت‌های شما روی همین مرورگر محفوظ است. هر زمان که تصمیمی تازه در پیش داشتید، با یک مکث کوتاه به درنگ بازگردید.
+          <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+            {content.site.farewellText}
           </p>
           <div className="mt-6 flex flex-col gap-2">
             <button
               onClick={() => handleNavigate('home')}
-              className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all"
+              className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-surface shadow-sm hover:bg-primary-hover transition-all"
             >
-              بازگشت به میز کار درنگ
+              بازگشت به میز کار {content.site.brandName}
             </button>
           </div>
         </div>
@@ -525,10 +825,8 @@ export default function App() {
     );
   }
 
-  // Render Core App Layout
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-24 transition-colors">
-      {/* Top Bar */}
+    <div className="min-h-screen flex flex-col bg-canvas text-ink pb-24 transition-colors">
       <TopBar
         currentScreen={screen}
         onNavigate={handleNavigate}
@@ -538,9 +836,12 @@ export default function App() {
           playSoundEffect('exit', settings.sound, settings.fxVolume);
           setScreen('farewell');
         }}
+        onOpenAdmin={() => setScreen('admin')}
+        brandName={content.site.brandName}
+        orgName={content.site.orgName}
+        tagline={content.site.tagline}
       />
 
-      {/* Main View Area */}
       <main className="mx-auto w-full max-w-4xl px-4 py-5 sm:px-6">
         {/* ============================================================== */}
         {/* SCREEN: HOME (میز کار) */}
@@ -548,24 +849,24 @@ export default function App() {
         {screen === 'home' && (
           <div className="flex flex-col gap-5 text-right">
             {/* Hero Card */}
-            <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/40 p-6 sm:p-8 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800/80">
+            <div className="rounded-3xl border border-line bg-surface p-6 sm:p-8 shadow-sm">
               <div className="max-w-2xl">
-                <div className="flex items-center gap-2 text-xs font-bold text-blue-600 dark:text-blue-400 mb-2">
-                  <span>همراه اختصاصی تصمیم‌گیری</span>
+                <div className="flex items-center gap-2 text-xs font-bold text-primary mb-2">
+                  <span>{content.site.heroKicker}</span>
                   <span aria-hidden="true">·</span>
                   <span>{profile.first} عزیز، خوش آمدید</span>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
-                  پیش از یک تصمیم مهم، چند دقیقه «درنگ» کنید.
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight leading-tight">
+                  {content.site.heroTitle}
                 </h1>
-                <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
-                  مسئله را در پنج ایستگاه نقادانه بسنجید؛ سوگیری‌های پنهان را آشکار سازید و پیامدهای غیرقابل بازگشت را پیش از وقوع مهار کنید.
+                <p className="mt-2 text-sm text-ink-2 leading-relaxed font-normal">
+                  {content.site.heroSubtitle}
                 </p>
 
                 <div className="mt-6 flex flex-wrap gap-2.5">
                   <button
                     onClick={() => handleNavigate('newDecision')}
-                    className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-xs font-bold text-white shadow-md shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all"
+                    className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-bold text-surface shadow-sm hover:bg-primary-hover active:scale-95 transition-all"
                   >
                     <PlusCircle className="h-4 w-4" />
                     <span>بررسی تصمیم جدید</span>
@@ -573,17 +874,20 @@ export default function App() {
 
                   {currentDecision && (
                     <button
-                      onClick={() => handleNavigate('question')}
-                      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-800 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-colors shadow-sm"
+                      onClick={() => {
+                        setQuestionIndex(getFirstUnansweredIndex(currentDecision));
+                        handleNavigate('question');
+                      }}
+                      className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 px-4 py-3 text-xs font-bold text-ink hover:bg-line transition-colors shadow-sm"
                     >
-                      <FolderOpen className="h-4 w-4 text-blue-600" />
+                      <FolderOpen className="h-4 w-4 text-primary" />
                       <span>ادامه تصمیم «{truncate(currentDecision.title, 22)}»</span>
                     </button>
                   )}
 
                   <button
                     onClick={() => setActiveModal('tour')}
-                    className="flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/70 px-3.5 py-3 text-xs font-semibold text-slate-600 hover:bg-white dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300 transition-colors"
+                    className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3.5 py-3 text-xs font-bold text-ink-2 hover:bg-surface-2 transition-colors"
                   >
                     <Compass className="h-4 w-4" />
                     <span>تور آموزشی</span>
@@ -592,43 +896,41 @@ export default function App() {
               </div>
             </div>
 
-            {/* Quick 2-Column Section: Learning Next Step + Discovery Quiz */}
+            {/* Quick 2-Column: Learning Next Step + Discovery Quiz */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Learning Next Step Card */}
-              <div className="flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex flex-col justify-between rounded-3xl border border-line bg-surface p-5 shadow-sm">
                 <div>
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                  <div className="flex items-center justify-between border-b border-line pb-3">
+                    <span className="text-xs font-bold text-warning-ink">
                       گام بعدی یادگیری
                     </span>
-                    <span className="text-[11px] font-semibold text-slate-500 tabular-nums">
-                      {toPersianDigits(learningDone.length)} از {toPersianDigits(7)} ایستگاه
+                    <span className="text-[13px] font-semibold text-ink-3 tabular-nums">
+                      {toPersianDigits(learningDone.length)} از {toPersianDigits(LEARNING_STEPS.length)} ایستگاه
                     </span>
                   </div>
-                  <h3 className="mt-3 text-base font-extrabold text-slate-900 dark:text-white">
+                  <h3 className="mt-3 text-base font-bold text-ink">
                     {nextLearningStep.title}
                   </h3>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <p className="mt-1 text-sm text-ink-2 leading-relaxed">
                     با گذراندن این بخش، خطاهای قضاوت را بهتر تشخیص داده و چک‌لیست تصمیم را با تسلط بیشتری به کار می‌گیرید.
                   </p>
                 </div>
 
                 <div className="mt-5 flex items-center justify-between pt-2">
                   <div className="flex items-center gap-1">
-                    {Array.from({ length: 7 }).map((_, idx) => (
+                    {LEARNING_STEPS.map((_, idx) => (
                       <span
                         key={idx}
                         className={`h-2 rounded-full transition-all ${
-                          idx < learningDone.length
-                            ? 'w-4 bg-blue-600'
-                            : 'w-2 bg-slate-200 dark:bg-slate-700'
+                          idx < learningDone.length ? 'w-4 bg-primary' : 'w-2 bg-line-strong'
                         }`}
                       />
                     ))}
                   </div>
                   <button
                     onClick={() => handleNavigate(nextLearningStep.screen)}
-                    className="flex items-center gap-1 rounded-xl bg-slate-100 px-3.5 py-2 text-xs font-bold text-slate-800 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 transition-colors"
+                    className="flex items-center gap-1 rounded-xl bg-surface-2 px-3.5 py-2 text-xs font-bold text-ink hover:bg-line transition-colors"
                   >
                     <span>ادامه مسیر</span>
                     <ArrowLeft className="h-3.5 w-3.5" />
@@ -637,35 +939,35 @@ export default function App() {
               </div>
 
               {/* 2-Minute Discovery Challenge Card */}
-              <div className="flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex flex-col justify-between rounded-3xl border border-line bg-surface p-5 shadow-sm">
                 <div>
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-                    <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
+                  <div className="flex items-center justify-between border-b border-line pb-3">
+                    <span className="text-xs font-bold text-accent">
                       کشف ۲ دقیقه‌ای
                     </span>
-                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    <span className="text-[13px] font-bold text-success tabular-nums">
                       {toPersianDigits(challengeCorrectCount)} امتیاز درست
                     </span>
                   </div>
-                  <h3 className="mt-3 text-base font-extrabold text-slate-900 dark:text-white">
+                  <h3 className="mt-3 text-base font-bold text-ink">
                     چالش کشف دام‌ها و ابزارهای مکث
                   </h3>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <p className="mt-1 text-sm text-ink-2 leading-relaxed">
                     یک سناریوی تصمیم‌گیری واقعی را بسنجید، بازخورد منطقی بگیرید و کارت‌های شخصیت را باز کنید.
                   </p>
                 </div>
 
                 {/* Collectible Cards Strip */}
-                <div className="mt-4 flex items-center gap-1.5 overflow-x-auto pb-1">
+                <div className="mt-4 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                   {Object.keys(PEOPLE).map((pKey) => {
                     const isUnlocked = unlockedArchetypes.includes(pKey);
                     return (
                       <span
                         key={pKey}
-                        className={`flex h-8 px-2.5 items-center justify-center rounded-lg text-[10px] font-bold transition-all ${
+                        className={`flex h-8 px-2.5 items-center justify-center rounded-lg text-[13px] font-bold transition-all ${
                           isUnlocked
-                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/60'
-                            : 'bg-slate-100 text-slate-400 dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-700'
+                            ? 'bg-primary-soft text-primary-ink border border-primary/20'
+                            : 'bg-surface-2 text-ink-3 border border-dashed border-line-strong'
                         }`}
                       >
                         {isUnlocked ? PEOPLE[pKey].name.split(' ')[0] : '🔒'}
@@ -677,7 +979,7 @@ export default function App() {
                 <div className="mt-4 flex justify-end">
                   <button
                     onClick={() => handleNavigate('challenge')}
-                    className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-700 shadow-sm transition-all"
+                    className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-surface hover:opacity-90 shadow-sm transition-all"
                   >
                     <span>ورود به چالش</span>
                     <ArrowLeft className="h-3.5 w-3.5" />
@@ -687,19 +989,19 @@ export default function App() {
             </div>
 
             {/* Quick Spotlight on Library */}
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+            <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-sm">
+              <div className="flex items-center justify-between border-b border-line pb-3">
                 <div>
-                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                  <h3 className="text-base font-bold text-ink">
                     کتابخانه و منابع همراه
                   </h3>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-[13px] text-ink-3">
                     روایت‌های عبرت‌آموز صوتی، پاسخ‌های کتاب Tune In، و الگوهای تصمیم
                   </span>
                 </div>
                 <button
                   onClick={() => handleNavigate('library')}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1"
+                  className="text-xs font-bold text-primary hover:text-primary-hover flex items-center gap-1"
                 >
                   <span>مشاهده همه</span>
                   <ArrowLeft className="h-3.5 w-3.5" />
@@ -712,45 +1014,45 @@ export default function App() {
                     setLibraryFilter('audio');
                     handleNavigate('library');
                   }}
-                  className="flex flex-col items-start p-4 rounded-2xl bg-slate-50 hover:bg-blue-50/50 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800 transition-colors text-right"
+                  className="flex flex-col items-start p-4 rounded-2xl bg-surface-2 hover:bg-line border border-line transition-colors text-right"
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400 mb-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-soft text-primary-ink mb-2">
                     <Volume2 className="h-4 w-4" />
                   </div>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
-                    ۶ روایت صوتی
+                  <span className="text-sm font-bold text-ink">
+                    {toPersianDigits(AUDIO_STORIES.length)} روایت صوتی
                   </span>
-                  <span className="text-[11px] text-slate-500 mt-0.5">
+                  <span className="text-[13px] text-ink-3 mt-0.5">
                     اصفهان، تایتان، ترابانت و پالو آلتو
                   </span>
                 </button>
 
                 <button
                   onClick={() => handleNavigate('book')}
-                  className="flex flex-col items-start p-4 rounded-2xl bg-slate-50 hover:bg-amber-50/50 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800 transition-colors text-right"
+                  className="flex flex-col items-start p-4 rounded-2xl bg-surface-2 hover:bg-line border border-line transition-colors text-right"
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400 mb-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-warning-soft text-warning-ink mb-2">
                     <BookOpen className="h-4 w-4" />
                   </div>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
-                    پرسش‌های کتاب Tune In
+                  <span className="text-sm font-bold text-ink">
+                    {toPersianDigits(BOOK_QA.length)} پرسش کتاب Tune In
                   </span>
-                  <span className="text-[11px] text-slate-500 mt-0.5">
-                    ۱۵ پرسش با تمرین‌های ۶۰ ثانیه‌ای
+                  <span className="text-[13px] text-ink-3 mt-0.5">
+                    همراه تمرین‌های ۶۰ ثانیه‌ای
                   </span>
                 </button>
 
                 <button
                   onClick={() => handleNavigate('people')}
-                  className="flex flex-col items-start p-4 rounded-2xl bg-slate-50 hover:bg-purple-50/50 dark:bg-slate-800/60 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800 transition-colors text-right"
+                  className="flex flex-col items-start p-4 rounded-2xl bg-surface-2 hover:bg-line border border-line transition-colors text-right"
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400 mb-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent-ink mb-2">
                     <Layers className="h-4 w-4" />
                   </div>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                  <span className="text-sm font-bold text-ink">
                     پنج الگوی تصمیم
                   </span>
-                  <span className="text-[11px] text-slate-500 mt-0.5">
+                  <span className="text-[13px] text-ink-3 mt-0.5">
                     نقطه قوت و سایه افراط شخصیت‌ها
                   </span>
                 </button>
@@ -764,105 +1066,62 @@ export default function App() {
         {/* ============================================================== */}
         {screen === 'learning' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                مسیر هفت‌گانه هوشیاری
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm">
+              <span className="text-xs font-bold text-primary">
+                {content.site.pageIntros.learning.kicker}
               </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                از شناخت خطاهای ذهن تا مهارت سنجش در عمل
+              <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                {content.site.pageIntros.learning.title}
               </h2>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                می‌توانید به ترتیب پیشنهادی پیش بروید یا هر زمان بر حسب نیاز وارد هر بخش شوید. این مسیر برای پرورش عضله فکری شماست.
+              <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                {content.site.pageIntros.learning.desc}
               </p>
 
-              {/* Progress Line */}
-              <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  میزان پیشرفت کلی: {toPersianDigits(Math.round((learningDone.length / 7) * 100))}٪
+              <div className="mt-5 flex items-center justify-between border-t border-line pt-4">
+                <span className="text-xs font-bold text-ink-2">
+                  میزان پیشرفت کلی: {toPersianDigits(Math.round((learningDone.length / LEARNING_STEPS.length) * 100))}٪
                 </span>
                 <button
                   onClick={() => {
-                    setLearningDone([]);
-                    showToast('مسیر یادگیری برای بازخوانی مجدد بازنشانی شد.');
+                    if (window.confirm('پیشرفت مسیر یادگیری صفر شود؟')) {
+                      setLearningDone([]);
+                      showToast('مسیر یادگیری بازنشانی شد.');
+                    }
                   }}
-                  className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 transition-colors"
+                  className="text-[13px] font-semibold text-ink-3 hover:text-ink transition-colors"
                 >
                   مرور مجدد از آغاز
                 </button>
               </div>
             </div>
 
-            {/* Path Steps List */}
             <div className="flex flex-col gap-3">
-              {[
-                {
-                  id: 'why',
-                  title: '۱. چرا اصلاً به «درنگ» نیاز داریم؟',
-                  desc: 'کالبدشکافی نقاط کور (Blind spots)، نقاط ناشنوا (Deaf spots) و نقاط لال (Dumb spots).',
-                  screen: 'why' as Screen,
-                },
-                {
-                  id: 'perimeters',
-                  title: '۲. ده دام پنهان در مدل PERIMETERS',
-                  desc: 'از قدرت و ایگو تا هویت و داستان‌سرایی؛ ابزار تشخیص سوگیری‌ها پیش از اجرا.',
-                  screen: 'perimeters' as Screen,
-                },
-                {
-                  id: 'skills',
-                  title: '۳. هفت شایستگی رهبری هوشیار',
-                  desc: 'شایستگی‌های رفتار تصمیم‌گیرنده: ذهن باز، واقعیت‌سنجی، شنیدن مخالف و مرز اخلاقی.',
-                  screen: 'skills' as Screen,
-                },
-                {
-                  id: 'sonic',
-                  title: '۴. ابزارهای پنج‌گانه SONIC در لحظه',
-                  desc: 'تکنیک‌های ۵ چرا، حذف فرضی گزینه اول، آزمون احتمال و اصطکاک تصمیم.',
-                  screen: 'sonic' as Screen,
-                },
-                {
-                  id: 'people',
-                  title: '۵. پنج الگوی تصمیم‌گیری (شخصیت‌ها)',
-                  desc: 'داوینچی، لینکلن، ادیسون، چرچیل و اینشتین؛ نقطه قوت و روی دیگر آن (خطر افراط).',
-                  screen: 'people' as Screen,
-                },
-                {
-                  id: 'stories',
-                  title: '۶. روایت‌ها و عبرت‌های زنده',
-                  desc: 'ماجرای تایتان، اصفهان، ترابانت، پالو آلتو و ویدئوی تحلیلی شاه سلطان حسین.',
-                  screen: 'stories' as Screen,
-                },
-                {
-                  id: 'challenge',
-                  title: '۷. چالش‌های کشف و تمرین تعاملی',
-                  desc: 'سنجش موقعیت‌های واقعی، تشخیص دام، دریافت بازخورد سازنده و باز کردن کارت‌ها.',
-                  screen: 'challenge' as Screen,
-                },
-              ].map((step, idx) => {
+              {LEARNING_STEPS.map((step, idx) => {
                 const isDone = learningDone.includes(step.id);
                 return (
                   <div
                     key={step.id}
                     className={`flex items-center justify-between rounded-2xl border p-4.5 transition-all ${
                       isDone
-                        ? 'border-emerald-200/80 bg-emerald-50/20 dark:border-emerald-900/40 dark:bg-emerald-950/10'
-                        : 'border-slate-200/80 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900'
+                        ? 'border-success/30 bg-success-soft/30'
+                        : 'border-line bg-surface hover:border-line-strong'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <div
                         className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
                           isDone
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                            ? 'bg-success text-surface'
+                            : 'bg-surface-2 text-ink-2'
                         }`}
                       >
                         {isDone ? '✓' : toPersianDigits(idx + 1)}
                       </div>
                       <div className="text-right">
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        <h4 className="text-sm font-bold text-ink">
                           {step.title}
                         </h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
+                        <p className="text-xs text-ink-3 mt-0.5 line-clamp-1">
                           {step.desc}
                         </p>
                       </div>
@@ -872,8 +1131,8 @@ export default function App() {
                       onClick={() => handleNavigate(step.screen)}
                       className={`flex-shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
                         isDone
-                          ? 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
-                          : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+                          ? 'border border-line bg-surface text-ink hover:bg-surface-2'
+                          : 'bg-primary text-surface hover:bg-primary-hover shadow-sm'
                       }`}
                     >
                       {isDone ? 'مرور' : 'شروع'}
@@ -885,64 +1144,56 @@ export default function App() {
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* SUB-SCREEN: WHY (چرا درنگ؟) */}
-        {/* ============================================================== */}
+        {/* SUB-SCREENS: why, perimeters, skills, sonic, people, stories, challenge, book */}
         {screen === 'why' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                گام اول · ریشه‌یابی خطا
-              </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                چرا اصلاً به «درنگ» نیاز داریم؟
-              </h2>
-              <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
-                کتاب Tune In اثر نوالا والش نشان می‌دهد که فجایع مدیریتی معمولاً از سر کمبود اطلاعات روی نمی‌دهند؛ بلکه نتیجه دنیای داده‌زده، پرشتاب و پرنویزی هستند که در آن تفکر تحلیلی فدای شتاب‌زدگی می‌شود.
-              </p>
-
-              <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-                  <span className="text-xs font-extrabold text-rose-600 dark:text-rose-400 block mb-1">
-                    نقاط کور (Blind spots)
-                  </span>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    واقعیات و نشانه‌هایی که به دلیل سوگیری‌های اولیه یا فیلترهای ذهنی اصلاً در دامنه توجهمان قرار نمی‌گیرند.
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-                  <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400 block mb-1">
-                    نقاط ناشنوا (Deaf spots)
-                  </span>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    هشدارهایی که به گوشمان می‌رسد، اما به دلیل غرور، تعصب یا اعتبار گوینده، آن‌ها را نشنیده می‌گیریم.
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-                  <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 block mb-1">
-                    نقاط لال (Dumb spots)
-                  </span>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    لحظاتی که متوجه خطر یا ایرادی در تصمیم می‌شویم اما از ترس جمع یا همرنگی، شجاعت سخن گفتن را از دست می‌دهیم.
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-2xl bg-blue-50/70 p-4 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40">
-                <span className="text-xs font-bold text-blue-900 dark:text-blue-300 block mb-1">
-                  هدف غایی درنگ:
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm space-y-5">
+              <div>
+                <span className="text-xs font-bold text-primary">
+                  {content.site.pageIntros.why.kicker}
                 </span>
-                <p className="text-xs text-blue-800 dark:text-blue-200 leading-relaxed font-medium">
-                  هدف حذف صددرصدی تمام خطاها نیست؛ هدف ایجاد یک «اصطکاک هوشیارانه» است تا پیش از فرود آمدن چکش تصمیم، مطمئن شویم چیزی حیاتی از قلم نیفتاده است.
+                <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                  {content.site.pageIntros.why.title}
+                </h2>
+                <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                  {content.site.whyPage.intro}
                 </p>
               </div>
 
-              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {content.site.whyPage.spots.map((spot, sIdx) => {
+                  const toneColor =
+                    spot.tone === 'danger'
+                      ? 'text-danger'
+                      : spot.tone === 'warning'
+                      ? 'text-warning'
+                      : 'text-primary';
+                  return (
+                    <div key={sIdx} className="rounded-2xl border border-line bg-surface-2 p-4">
+                      <span className={`text-xs font-bold block mb-1 ${toneColor}`}>
+                        {spot.title}
+                      </span>
+                      <p className="text-sm text-ink-2 leading-relaxed">
+                        {spot.desc}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-2xl bg-primary-soft p-4 border border-primary/20">
+                <span className="text-xs font-bold text-primary-ink block mb-1">
+                  {content.site.whyPage.goalTitle}
+                </span>
+                <p className="text-sm text-primary-ink leading-relaxed font-medium">
+                  {content.site.whyPage.goalText}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
                   onClick={() => handleNavigate('learning')}
-                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400"
+                  className="text-xs font-bold text-ink-2 hover:text-ink"
                 >
                   بازگشت به فهرست مسیر
                 </button>
@@ -951,7 +1202,7 @@ export default function App() {
                     markLearningDone('why');
                     handleNavigate('perimeters');
                   }}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
                 >
                   <span>ثبت و رفتن به مدل PERIMETERS</span>
                   <ArrowLeft className="h-3.5 w-3.5" />
@@ -961,58 +1212,57 @@ export default function App() {
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* SUB-SCREEN: PERIMETERS (ده دام تصمیم) */}
-        {/* ============================================================== */}
         {screen === 'perimeters' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                گام دوم · مدل ده مؤلفه‌ای
-              </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                ده دام تصمیم در مدل PERIMETERS
-              </h2>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                این ده دام حاصل هزاران تصمیم ناموفق در سیاست و کسب‌وکار است. هدف حفظ اصطلاحات انگلیسی نیست؛ بلکه تجهیز ذهن به یک قطب‌نمای هشدار در لحظه قضاوت است.
-              </p>
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm space-y-5">
+              <div>
+                <span className="text-xs font-bold text-primary">
+                  {content.site.pageIntros.perimeters.kicker}
+                </span>
+                <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                  {content.site.pageIntros.perimeters.title}
+                </h2>
+                <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                  {content.site.pageIntros.perimeters.desc}
+                </p>
+              </div>
 
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {PERIMETERS.map((p, idx) => (
                   <div
                     key={p.en}
-                    className="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-850"
+                    className="flex flex-col justify-between rounded-2xl border border-line bg-surface-2 p-4"
                   >
                     <div>
-                      <div className="flex items-center justify-between border-b border-slate-200/50 pb-2 dark:border-slate-700/50">
+                      <div className="flex items-center justify-between border-b border-line pb-2">
                         <div className="flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-600 text-white font-mono text-xs font-bold">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary text-surface font-mono text-xs font-bold">
                             {p.tag}
                           </span>
-                          <span className="text-xs font-extrabold text-slate-900 dark:text-white">
+                          <span className="text-sm font-bold text-ink">
                             {p.fa} ({p.en})
                           </span>
                         </div>
-                        <span className="text-[10px] font-semibold text-slate-400">
+                        <span className="text-[13px] font-semibold text-ink-3">
                           دام {toPersianDigits(idx + 1)} از ۱۰
                         </span>
                       </div>
-                      <p className="mt-2.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      <p className="mt-2.5 text-sm text-ink-2 leading-relaxed">
                         {p.desc}
                       </p>
                     </div>
 
-                    <div className="mt-3.5 space-y-2 border-t border-slate-200/40 pt-2.5 dark:border-slate-800">
-                      <div className="rounded-xl bg-amber-50/80 p-2.5 dark:bg-amber-950/20 border border-amber-200/40">
-                        <span className="text-[11px] font-bold text-amber-900 dark:text-amber-300 block mb-0.5">
+                    <div className="mt-3.5 space-y-2 border-t border-line pt-2.5">
+                      <div className="rounded-xl bg-warning-soft p-2.5 border border-warning/20">
+                        <span className="text-[13px] font-bold text-warning-ink block mb-0.5">
                           پرسش درنگ:
                         </span>
-                        <p className="text-[11px] text-amber-800 dark:text-amber-200 leading-relaxed font-medium">
+                        <p className="text-[13px] text-warning-ink leading-relaxed font-medium">
                           {p.question}
                         </p>
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                        <strong className="text-slate-700 dark:text-slate-300">راهکار پادزهر: </strong>
+                      <div className="text-[13px] text-ink-3">
+                        <strong className="text-ink">راهکار پادزهر: </strong>
                         {p.solution}
                       </div>
                     </div>
@@ -1020,10 +1270,10 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+              <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
                   onClick={() => handleNavigate('learning')}
-                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400"
+                  className="text-xs font-bold text-ink-2 hover:text-ink"
                 >
                   بازگشت به مسیر
                 </button>
@@ -1032,7 +1282,7 @@ export default function App() {
                     markLearningDone('perimeters');
                     handleNavigate('skills');
                   }}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
                 >
                   <span>ثبت و رفتن به شایستگی‌ها</span>
                   <ArrowLeft className="h-3.5 w-3.5" />
@@ -1042,36 +1292,35 @@ export default function App() {
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* SUB-SCREEN: SKILLS (شایستگی‌های رهبری هوشیار) */}
-        {/* ============================================================== */}
         {screen === 'skills' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                گام سوم · رفتار و شایستگی
-              </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                هفت شایستگی رهبری هوشیار
-              </h2>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                چارچوب شایستگی‌های طراحی‌شده در پردیس نوآوری گِرا برای رویارویی با ده دام تصمیم‌گیری.
-              </p>
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm space-y-5">
+              <div>
+                <span className="text-xs font-bold text-primary">
+                  {content.site.pageIntros.skills.kicker}
+                </span>
+                <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                  {content.site.pageIntros.skills.title}
+                </h2>
+                <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                  {content.site.pageIntros.skills.desc}
+                </p>
+              </div>
 
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                 {SKILLS.map((skill, idx) => (
                   <div
                     key={skill.name}
-                    className="flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-800/40"
+                    className="flex items-start gap-3 rounded-2xl border border-line bg-surface-2 p-4"
                   >
-                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-bold text-xs mt-0.5">
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-ink font-bold text-xs mt-0.5">
                       {toPersianDigits(idx + 1)}
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                      <h4 className="text-sm font-bold text-ink">
                         {skill.name}
                       </h4>
-                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      <p className="mt-1 text-sm text-ink-2 leading-relaxed">
                         {skill.desc}
                       </p>
                     </div>
@@ -1079,10 +1328,10 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+              <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
                   onClick={() => handleNavigate('learning')}
-                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400"
+                  className="text-xs font-bold text-ink-2 hover:text-ink"
                 >
                   بازگشت به مسیر
                 </button>
@@ -1091,7 +1340,7 @@ export default function App() {
                     markLearningDone('skills');
                     handleNavigate('sonic');
                   }}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
                 >
                   <span>ثبت و رفتن به ابزارهای SONIC</span>
                   <ArrowLeft className="h-3.5 w-3.5" />
@@ -1101,45 +1350,44 @@ export default function App() {
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* SUB-SCREEN: SONIC (ابزارهای اصطکاک تصمیم) */}
-        {/* ============================================================== */}
         {screen === 'sonic' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                گام چهارم · جعبه ابزار اقدام در لحظه
-              </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                مدل SONIC؛ اصطکاک هوشیارانه
-              </h2>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                برگرفته از فصل ۱۴ کتاب Tune In؛ این ۵ تکنیک برای کند کردن کورکورانه نیست، بلکه برای مداخله در گلوگاه‌های تصمیم است.
-              </p>
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm space-y-5">
+              <div>
+                <span className="text-xs font-bold text-primary">
+                  {content.site.pageIntros.sonic.kicker}
+                </span>
+                <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                  {content.site.pageIntros.sonic.title}
+                </h2>
+                <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                  {content.site.pageIntros.sonic.desc}
+                </p>
+              </div>
 
-              <div className="mt-6 space-y-3.5">
+              <div className="space-y-3.5">
                 {SONIC.map((tool) => (
                   <div
                     key={tool.letter}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-800/40"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-line bg-surface-2 p-4"
                   >
                     <div className="flex items-start sm:items-center gap-3">
-                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white font-black text-lg">
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-surface font-black text-lg">
                         {tool.letter}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                          <h4 className="text-sm font-bold text-ink">
                             {tool.fa}
                           </h4>
-                          <span className="text-[11px] font-mono text-slate-400">
+                          <span className="text-xs font-mono text-ink-3">
                             ({tool.en})
                           </span>
                         </div>
-                        <span className="text-xs font-bold text-blue-600 dark:text-blue-400 block mt-0.5">
+                        <span className="text-xs font-bold text-primary block mt-0.5">
                           ابزار کلیدی: {tool.tool}
                         </span>
-                        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        <p className="mt-1 text-sm text-ink-2 leading-relaxed">
                           {tool.desc}
                         </p>
                       </div>
@@ -1148,10 +1396,10 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+              <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
                   onClick={() => handleNavigate('learning')}
-                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400"
+                  className="text-xs font-bold text-ink-2 hover:text-ink"
                 >
                   بازگشت به مسیر
                 </button>
@@ -1160,7 +1408,7 @@ export default function App() {
                     markLearningDone('sonic');
                     handleNavigate('people');
                   }}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
                 >
                   <span>ثبت و رفتن به الگوهای شخصیت</span>
                   <ArrowLeft className="h-3.5 w-3.5" />
@@ -1170,24 +1418,22 @@ export default function App() {
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* SUB-SCREEN: PEOPLE (پنج الگوی تصمیم‌گیری) */}
-        {/* ============================================================== */}
         {screen === 'people' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                گام پنجم · تیپ‌های تصمیم‌گیری
-              </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                پنج الگوی تصمیم‌گیری تاریخی
-              </h2>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                هر انسان دارای یک نقطه قوت اصلی در تصمیم‌گیری است؛ اما جالب اینجاست که بزرگ‌ترین شکست‌ها معمولاً در اثر «افراط در همان نقطه قوت» رقم می‌خورد! روی کارت‌ها بزنید تا سایه پنهان هر کدام را کشف کنید.
-              </p>
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm space-y-5">
+              <div>
+                <span className="text-xs font-bold text-primary">
+                  {content.site.pageIntros.people.kicker}
+                </span>
+                <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                  {content.site.pageIntros.people.title}
+                </h2>
+                <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                  {content.site.pageIntros.people.desc}
+                </p>
+              </div>
 
-              {/* Archetype switcher tabs */}
-              <div className="mt-5 flex gap-1.5 overflow-x-auto pb-2 scrollbar-none">
+              <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-none">
                 {Object.keys(PEOPLE).map((id) => {
                   const p = PEOPLE[id];
                   const isActive = activeArchetype === id;
@@ -1200,8 +1446,8 @@ export default function App() {
                       }}
                       className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
                         isActive
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                          ? 'bg-primary text-surface shadow-sm'
+                          : 'bg-surface-2 text-ink-2 hover:bg-line'
                       }`}
                     >
                       <span>{p.name}</span>
@@ -1210,15 +1456,18 @@ export default function App() {
                 })}
               </div>
 
-              {/* Active Archetype Card */}
-              <div className="mt-4">
-                <ArchetypeCard archetype={PEOPLE[activeArchetype]} />
-              </div>
+              <ArchetypeCard
+                archetype={PEOPLE[activeArchetype] || Object.values(PEOPLE)[0]}
+                externalTestUrl={content.site.externalTestUrl}
+                externalTestTitle={content.site.externalTestTitle}
+                externalTestSubtitle={content.site.externalTestSubtitle}
+                externalTestButton={content.site.externalTestButton}
+              />
 
-              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+              <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
                   onClick={() => handleNavigate('learning')}
-                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400"
+                  className="text-xs font-bold text-ink-2 hover:text-ink"
                 >
                   بازگشت به مسیر
                 </button>
@@ -1227,7 +1476,7 @@ export default function App() {
                     markLearningDone('people');
                     handleNavigate('stories');
                   }}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
                 >
                   <span>ثبت و رفتن به روایت‌ها</span>
                   <ArrowLeft className="h-3.5 w-3.5" />
@@ -1237,49 +1486,48 @@ export default function App() {
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* SUB-SCREEN: STORIES (روایت‌ها و تجارب) */}
-        {/* ============================================================== */}
         {screen === 'stories' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                گام ششم · روایت‌های تاریخی و صنعتی
-              </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                دیدن دام‌ها در صحنه تاریخ و کسب‌وکار
-              </h2>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                یکی از روایت‌های صوتی را گوش دهید یا ویدئوی تحلیلی را تماشا کنید و ببینید کدام دام در پروژه‌های شما نیز زمزمه می‌کند.
-              </p>
-
-              {/* Video Spotlight Card */}
-              <div className="mt-5 rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/40 p-5 dark:border-amber-900/40 dark:from-slate-900 dark:to-slate-850">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div>
-                    <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
-                      ویدئوی تحلیلی و طنز انتقادی
-                    </span>
-                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white mt-0.5">
-                      شاه سلطان حسین؛ هزینه گزاف تعلل در تصمیم‌گیری
-                    </h3>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-lg leading-relaxed">
-                      روایتی هنری و نمادین از شاهی که «تصمیم نگرفتن» را به امید تقدیر ترجیح داد و پایتختی ۲۰۰ ساله را به نابودی سپرد.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setActiveModal('video')}
-                    className="flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-amber-700 transition-all whitespace-nowrap"
-                  >
-                    <Video className="h-4 w-4" />
-                    <span>تماشای ویدئو</span>
-                  </button>
-                </div>
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm space-y-5">
+              <div>
+                <span className="text-xs font-bold text-primary">
+                  {content.site.pageIntros.stories.kicker}
+                </span>
+                <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                  {content.site.pageIntros.stories.title}
+                </h2>
+                <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                  {content.site.pageIntros.stories.desc}
+                </p>
               </div>
 
-              {/* Audio Stories List */}
-              <div className="mt-5 space-y-4">
-                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+              {content.videos[0] && content.videos[0].showOnStories && (
+                <div className="rounded-2xl border border-line bg-surface-2 p-5">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <span className="text-[13px] font-bold text-warning">
+                        {content.videos[0].badge}
+                      </span>
+                      <h3 className="text-base font-bold text-ink mt-0.5">
+                        {content.videos[0].title}
+                      </h3>
+                      <p className="text-sm text-ink-2 mt-1 max-w-lg leading-relaxed">
+                        {content.videos[0].desc}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setActiveModal('video')}
+                      className="flex items-center gap-1.5 rounded-xl bg-warning px-4 py-2.5 text-xs font-bold text-surface shadow-sm hover:opacity-90 transition-all whitespace-nowrap"
+                    >
+                      <Video className="h-4 w-4" />
+                      <span>تماشای ویدئو</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-ink">
                   روایت‌های صوتی (پخش درون‌برنامه‌ای با متن کامل):
                 </h4>
                 {AUDIO_STORIES.map((story) => (
@@ -1287,10 +1535,10 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+              <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
                   onClick={() => handleNavigate('learning')}
-                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400"
+                  className="text-xs font-bold text-ink-2 hover:text-ink"
                 >
                   بازگشت به مسیر
                 </button>
@@ -1299,7 +1547,7 @@ export default function App() {
                     markLearningDone('stories');
                     handleNavigate('challenge');
                   }}
-                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
+                  className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
                 >
                   <span>ثبت و رفتن به چالش‌های کشف</span>
                   <ArrowLeft className="h-3.5 w-3.5" />
@@ -1309,78 +1557,81 @@ export default function App() {
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* SUB-SCREEN: CHALLENGE (چالش کشف و بازخورد) */}
-        {/* ============================================================== */}
         {screen === 'challenge' && (
           <div className="flex flex-col gap-5 text-right">
-            {showConfetti && <Confetti onComplete={() => setShowConfetti(false)} />}
+            {showConfetti && <Confetti onComplete={() => setShowConfetti(false)} isMotionEnabled={settings.motion} />}
 
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm space-y-5">
+              <div className="flex items-center justify-between border-b border-line pb-3">
                 <div>
-                  <span className="text-xs font-bold text-purple-600 dark:text-purple-400">
-                    گام هفتم · تمرین و بازی‌وارسازی
+                  <span className="text-xs font-bold text-accent">
+                    {content.site.pageIntros.challenge.kicker}
                   </span>
-                  <h2 className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
-                    چالش کشف دام‌ها ({CHALLENGES[challengeIndex % CHALLENGES.length].type})
+                  <h2 className="text-xl font-bold text-ink mt-0.5">
+                    {content.site.pageIntros.challenge.title} ({CHALLENGES[challengeIndex % CHALLENGES.length]?.type || 'دام‌یاب'})
                   </h2>
                 </div>
-                <div className="flex items-center gap-1.5 rounded-xl bg-purple-50 px-3 py-1.5 text-xs font-bold text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                <div className="flex items-center gap-1.5 rounded-xl bg-accent-soft px-3 py-1.5 text-xs font-bold text-accent-ink">
                   <Award className="h-4 w-4" />
                   <span>{toPersianDigits(challengeCorrectCount)} پاسخ درست</span>
                 </div>
               </div>
 
-              {/* Challenge Body */}
-              <div className="mt-5">
-                <p className="text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
+              {/* Already Answered Notice */}
+              {answeredChallenges.includes(String(challengeIndex)) && (
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-success bg-success-soft px-3 py-1 rounded-full">
+                  <span>✓ پاسخ داده شده</span>
+                </div>
+              )}
+
+              <div>
+                <p className="text-sm font-bold text-ink leading-relaxed">
                   {CHALLENGES[challengeIndex % CHALLENGES.length].q}
                 </p>
 
-                {/* Options List */}
-                <div className="mt-5 space-y-2.5">
+                <div role="radiogroup" aria-label="گزینه‌های پاسخ چالش" className="mt-5 space-y-2.5">
                   {CHALLENGES[challengeIndex % CHALLENGES.length].opts.map((opt, optIdx) => {
                     const isCorrectOption = optIdx === CHALLENGES[challengeIndex % CHALLENGES.length].ans;
                     const isSelected = selectedChallengeOption === optIdx;
 
-                    let btnStyle = 'border-slate-200/90 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800';
+                    let btnStyle = 'border-line bg-surface hover:bg-surface-2 text-ink';
                     if (challengeAnswered) {
                       if (isCorrectOption) {
-                        btnStyle = 'border-emerald-500 bg-emerald-50/80 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 font-bold';
+                        btnStyle = 'border-success bg-success-soft text-success-ink font-bold';
                       } else if (isSelected) {
-                        btnStyle = 'border-rose-500 bg-rose-50/80 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200';
+                        btnStyle = 'border-danger bg-danger-soft text-danger-ink';
                       } else {
-                        btnStyle = 'opacity-40 border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900';
+                        btnStyle = 'opacity-40 border-line bg-surface-2 text-ink-3';
                       }
                     }
 
                     return (
                       <button
                         key={optIdx}
+                        role="radio"
+                        aria-checked={isSelected}
                         disabled={challengeAnswered}
                         onClick={() => handleChallengeAnswer(optIdx)}
-                        className={`w-full flex items-center justify-between rounded-xl border p-3.5 text-right text-xs font-semibold transition-all ${btnStyle}`}
+                        className={`w-full flex items-center justify-between rounded-xl border p-3.5 text-right text-sm font-semibold transition-all ${btnStyle}`}
                       >
                         <span>{opt}</span>
                         {challengeAnswered && isCorrectOption && (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                          <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                         )}
                         {challengeAnswered && isSelected && !isCorrectOption && (
-                          <XCircle className="h-4 w-4 text-rose-600 flex-shrink-0" />
+                          <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
                         )}
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Feedback Box */}
                 {challengeAnswered && (
                   <div
-                    className={`mt-4 rounded-2xl p-4 border text-xs leading-relaxed ${
+                    className={`mt-4 rounded-2xl p-4 border text-sm leading-relaxed ${
                       selectedChallengeOption === CHALLENGES[challengeIndex % CHALLENGES.length].ans
-                        ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-200'
-                        : 'border-amber-200 bg-amber-50/80 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200'
+                        ? 'border-success/30 bg-success-soft text-success-ink'
+                        : 'border-warning/30 bg-warning-soft text-warning-ink'
                     }`}
                   >
                     <strong className="block font-bold mb-1">
@@ -1393,12 +1644,39 @@ export default function App() {
                 )}
               </div>
 
+              {/* Challenge summary card after final challenge */}
+              {challengeIndex === CHALLENGES.length - 1 && challengeAnswered && (
+                <div className="rounded-2xl border border-line bg-surface-2 p-5 text-center space-y-3">
+                  <h3 className="text-base font-bold text-ink">
+                    {toPersianDigits(challengeCorrectCount)} از {toPersianDigits(CHALLENGES.length)} چالش را درست پاسخ دادید
+                  </h3>
+                  <div className="flex justify-center gap-2">
+                    <button
+                      onClick={() => {
+                        setChallengeIndex(0);
+                        setChallengeAnswered(false);
+                        setSelectedChallengeOption(null);
+                      }}
+                      className="rounded-xl border border-line bg-surface px-4 py-2 text-xs font-bold text-ink hover:bg-surface-2"
+                    >
+                      مرور دوباره
+                    </button>
+                    <button
+                      onClick={() => handleNavigate('home')}
+                      className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
+                    >
+                      بازگشت به میز کار
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Digital Collectible Cards Progress */}
-              <div className="mt-6 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-2">
+              <div className="border-t border-line pt-4">
+                <span className="text-xs font-bold text-ink-2 block mb-2">
                   کارت‌های دیجیتال شخصیت‌های باز شده:
                 </span>
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                   {Object.keys(PEOPLE).map((pKey) => {
                     const isUnlocked = unlockedArchetypes.includes(pKey);
                     return (
@@ -1406,8 +1684,8 @@ export default function App() {
                         key={pKey}
                         className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold border transition-all ${
                           isUnlocked
-                            ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-300 shadow-sm'
-                            : 'border-dashed border-slate-300 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900'
+                            ? 'border-primary/20 bg-primary-soft text-primary-ink shadow-sm'
+                            : 'border-dashed border-line-strong bg-surface-2 text-ink-3'
                         }`}
                       >
                         <span>{isUnlocked ? '✓' : '🔒'}</span>
@@ -1418,25 +1696,24 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Bottom Actions */}
-              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+              <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
                   onClick={() => handleNavigate('learning')}
-                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400"
+                  className="text-xs font-bold text-ink-2 hover:text-ink"
                 >
                   بازگشت به مسیر
                 </button>
 
                 <div className="flex gap-2">
-                  {challengeAnswered ? (
+                  {challengeAnswered && challengeIndex < CHALLENGES.length - 1 && (
                     <button
                       onClick={handleNextChallenge}
-                      className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-700 shadow-sm"
+                      className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-surface hover:opacity-90 shadow-sm"
                     >
                       <span>چالش بعدی</span>
                       <ArrowLeft className="h-3.5 w-3.5" />
                     </button>
-                  ) : null}
+                  )}
 
                   <button
                     onClick={() => {
@@ -1444,7 +1721,7 @@ export default function App() {
                       showToast('تبریک! تمام بخش‌های مسیر یادگیری را طی کردید.');
                       handleNavigate('home');
                     }}
-                    className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 shadow-sm"
+                    className="rounded-xl border border-line bg-surface px-3.5 py-2 text-xs font-bold text-ink hover:bg-surface-2 shadow-sm"
                   >
                     تکمیل و بازگشت به میز کار
                   </button>
@@ -1454,147 +1731,17 @@ export default function App() {
           </div>
         )}
 
-        {/* ============================================================== */}
-        {/* SCREEN: LIBRARY (کتابخانه جامع) */}
-        {/* ============================================================== */}
-        {screen === 'library' && (
-          <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                گنجینه دانش
-              </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                کتابخانه جامع درنگ
-              </h2>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                تمام روایت‌های صوتی، خلاصه‌های کتاب Tune In، درس ویدئویی و تمرین‌ها در این بخش به آسانی قابل جستجو و مطالعه‌اند.
-              </p>
-
-              {/* Search input */}
-              <div className="relative mt-4">
-                <Search className="absolute right-3.5 top-3.5 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="جستجو در موضوعات، روایت‌ها، و پرسش‌ها..."
-                  value={librarySearch}
-                  onChange={(e) => setLibrarySearch(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/60 pr-10 pl-4 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white text-right"
-                />
-              </div>
-
-              {/* Filter Tabs */}
-              <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                {[
-                  { id: 'all', label: 'همه منابع' },
-                  { id: 'audio', label: 'روایت‌های صوتی' },
-                  { id: 'video', label: 'ویدئوی تحلیلی' },
-                  { id: 'book', label: 'پرسش‌های کتاب' },
-                  { id: 'practice', label: 'چالش‌ها و تمرین' },
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => {
-                      playSoundEffect('tap', settings.sound, settings.fxVolume);
-                      setLibraryFilter(f.id as any);
-                    }}
-                    className={`whitespace-nowrap rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
-                      libraryFilter === f.id
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Library Content Items */}
-            <div className="space-y-4">
-              {/* Audio Stories */}
-              {(libraryFilter === 'all' || libraryFilter === 'audio') && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                    <Volume2 className="h-4 w-4 text-blue-600" />
-                    <span>روایت‌های صوتی مستند:</span>
-                  </div>
-                  {AUDIO_STORIES.filter(
-                    (s) =>
-                      !librarySearch.trim() ||
-                      s.title.includes(librarySearch) ||
-                      s.desc.includes(librarySearch) ||
-                      s.tags.some((t) => t.includes(librarySearch))
-                  ).map((story) => (
-                    <AudioPlayer key={story.key} story={story} volume={settings.volume} />
-                  ))}
-                </div>
-              )}
-
-              {/* Video Module */}
-              {(libraryFilter === 'all' || libraryFilter === 'video') && (
-                <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-[11px] font-bold text-amber-600">ویدئو</span>
-                      <h4 className="text-base font-bold text-slate-900 dark:text-white mt-0.5">
-                        شاه سلطان حسین؛ هزینه تعلل در تصمیم‌گیری
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1">
-                        روایت طنزآمیز و درس‌آموز از پیامدهای ترس از اتخاذ تصمیمات سخت
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setActiveModal('video')}
-                      className="flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 shadow-sm"
-                    >
-                      <Video className="h-4 w-4" />
-                      <span>تماشا</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Book Q&A Link */}
-              {(libraryFilter === 'all' || libraryFilter === 'book') && (
-                <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-[11px] font-bold text-blue-600">کتاب Tune In</span>
-                      <h4 className="text-base font-bold text-slate-900 dark:text-white mt-0.5">
-                        ۱۵ پرسش بنیادین تصمیم‌گیری از نگاه نوالا والش
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1">
-                        پاسخ‌های کاربردی به همراه تمرین ۶۰ ثانیه‌ای برای هر پرسش
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleNavigate('book')}
-                      className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
-                    >
-                      <BookOpen className="h-4 w-4" />
-                      <span>مشاهده پرسش‌ها</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ============================================================== */}
-        {/* SCREEN: BOOK (پرسش‌های کتاب Tune In) */}
-        {/* ============================================================== */}
         {screen === 'book' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                آموزش مفهومی
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm">
+              <span className="text-xs font-bold text-primary">
+                {content.site.pageIntros.book.kicker}
               </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                پرسش‌های کتاب Tune In اثر نوالا والش
+              <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                {content.site.pageIntros.book.title}
               </h2>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                به جای خلاصه کتاب خسته‌کننده، این ۱۵ پرسش کلیدی چکیده عملی و کاربردی مفاهیم کتاب برای تصمیمات روزمره شماست.
+              <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                {content.site.pageIntros.book.desc}
               </p>
             </div>
 
@@ -1604,49 +1751,50 @@ export default function App() {
                 return (
                   <div
                     key={idx}
-                    className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 transition-all"
+                    className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition-all"
                   >
                     <button
                       onClick={() => {
                         playSoundEffect('tap', settings.sound, settings.fxVolume);
                         setOpenBookIndex(isOpen ? null : idx);
                       }}
-                      className="flex w-full items-center justify-between p-4.5 text-right hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                      className="flex w-full items-center justify-between p-4.5 text-right hover:bg-surface-2 transition-colors"
+                      aria-expanded={isOpen}
                     >
                       <div className="flex items-start gap-3">
-                        <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400 font-bold text-xs mt-0.5">
+                        <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary font-bold text-xs mt-0.5">
                           {toPersianDigits(idx + 1)}
                         </span>
                         <div>
-                          <span className="text-[11px] font-semibold text-slate-400 block mb-0.5">
+                          <span className="text-[13px] font-semibold text-ink-3 block mb-0.5">
                             {item.category}
                           </span>
-                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                          <h4 className="text-sm font-bold text-ink">
                             {item.q}
                           </h4>
                         </div>
                       </div>
                       {isOpen ? (
-                        <ChevronUp className="h-5 w-5 text-slate-400 flex-shrink-0" />
+                        <ChevronUp className="h-5 w-5 text-ink-3 flex-shrink-0" />
                       ) : (
-                        <ChevronDown className="h-5 w-5 text-slate-400 flex-shrink-0" />
+                        <ChevronDown className="h-5 w-5 text-ink-3 flex-shrink-0" />
                       )}
                     </button>
 
                     {isOpen && (
-                      <div className="border-t border-slate-100 bg-slate-50/50 p-5 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-300 space-y-3 leading-relaxed">
+                      <div className="border-t border-line bg-surface-2 p-5 text-sm text-ink-2 space-y-3 leading-relaxed animate-fadeIn">
                         <p className="font-normal">{item.a}</p>
 
-                        <div className="rounded-xl bg-amber-50/80 p-3.5 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/60">
-                          <span className="text-[11px] font-bold text-amber-900 dark:text-amber-300 block mb-0.5">
+                        <div className="rounded-xl bg-warning-soft p-3.5 border border-warning/20">
+                          <span className="text-[13px] font-bold text-warning-ink block mb-0.5">
                             تمرین ۶۰ ثانیه‌ای برای تصمیم شما:
                           </span>
-                          <p className="text-xs text-amber-800 dark:text-amber-200 font-medium">
+                          <p className="text-sm text-warning-ink font-medium">
                             {item.task}
                           </p>
                         </div>
 
-                        <span className="text-[11px] text-slate-400 block">
+                        <span className="text-xs text-ink-3 block">
                           ارجاع: {item.ref}
                         </span>
                       </div>
@@ -1659,26 +1807,241 @@ export default function App() {
         )}
 
         {/* ============================================================== */}
-        {/* SCREEN: DECISIONS (فهرست پرونده‌های تصمیم) */}
+        {/* SCREEN: LIBRARY (کتابخانه جامع) */}
+        {/* ============================================================== */}
+        {screen === 'library' && (
+          <div className="flex flex-col gap-5 text-right">
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm">
+              <span className="text-xs font-bold text-primary">
+                {content.site.pageIntros.library.kicker}
+              </span>
+              <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                {content.site.pageIntros.library.title}
+              </h2>
+              <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                {content.site.pageIntros.library.desc}
+              </p>
+
+              {/* Search input */}
+              <div className="relative mt-4">
+                <Search className="absolute right-3.5 top-3.5 h-4 w-4 text-ink-3" />
+                <input
+                  type="text"
+                  placeholder="جستجو در موضوعات، روایت‌ها، و پرسش‌ها..."
+                  value={librarySearch}
+                  onChange={(e) => setLibrarySearch(e.target.value)}
+                  className="w-full rounded-xl border border-line bg-surface-2 pr-10 pl-4 py-2.5 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-right"
+                />
+              </div>
+
+              {/* Filter Tabs without unused poster */}
+              <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                {[
+                  { id: 'all' as LibraryFilter, label: 'همه منابع' },
+                  { id: 'audio' as LibraryFilter, label: 'روایت‌های صوتی' },
+                  { id: 'video' as LibraryFilter, label: 'ویدئوی تحلیلی' },
+                  { id: 'book' as LibraryFilter, label: 'پرسش‌های کتاب' },
+                  { id: 'practice' as LibraryFilter, label: 'چالش‌ها و تمرین' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => {
+                      playSoundEffect('tap', settings.sound, settings.fxVolume);
+                      setLibraryFilter(f.id);
+                    }}
+                    className={`whitespace-nowrap rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+                      libraryFilter === f.id
+                        ? 'bg-primary text-surface shadow-sm'
+                        : 'bg-surface-2 text-ink-2 hover:bg-line'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Empty state when search has no results */}
+            {!hasAnyLibraryResults ? (
+              <div className="rounded-2xl border border-line bg-surface p-8 text-center text-sm text-ink-2">
+                نتیجه‌ای برای «{librarySearch}» پیدا نشد.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Audio Stories Section */}
+                {(libraryFilter === 'all' || libraryFilter === 'audio') && filteredAudio.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-ink-2">
+                      <Volume2 className="h-4 w-4 text-primary" />
+                      <span>روایت‌های صوتی مستند ({toPersianDigits(filteredAudio.length)} مورد):</span>
+                    </div>
+                    {filteredAudio.map((story) => (
+                      <AudioPlayer key={story.key} story={story} volume={settings.volume} />
+                    ))}
+                  </div>
+                )}
+
+                {/* Video Module Section */}
+                {(libraryFilter === 'all' || libraryFilter === 'video') && videoMatches && (
+                  <div className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-[13px] font-bold text-warning">ویدئو</span>
+                        <h4 className="text-base font-bold text-ink mt-0.5">
+                          شاه سلطان حسین؛ هزینه تعلل در تصمیم‌گیری
+                        </h4>
+                        <p className="text-sm text-ink-2 mt-1">
+                          روایت طنزآمیز و درس‌آموز از پیامدهای ترس از اتخاذ تصمیمات سخت
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setActiveModal('video')}
+                        className="flex items-center gap-1.5 rounded-xl bg-warning px-4 py-2 text-xs font-bold text-surface hover:opacity-90 shadow-sm"
+                      >
+                        <Video className="h-4 w-4" />
+                        <span>تماشا</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Book Q&A Items Section */}
+                {(libraryFilter === 'all' || libraryFilter === 'book') && filteredBookQA.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-ink-2">
+                      <BookOpen className="h-4 w-4 text-warning" />
+                      <span>پرسش‌های مرتبط کتاب Tune In ({toPersianDigits(filteredBookQA.length)} مورد):</span>
+                    </div>
+                    {filteredBookQA.map((item, idx) => {
+                      const isOpen = openBookIndex === idx;
+                      return (
+                        <div
+                          key={idx}
+                          className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition-all"
+                        >
+                          <button
+                            onClick={() => {
+                              playSoundEffect('tap', settings.sound, settings.fxVolume);
+                              setOpenBookIndex(isOpen ? null : idx);
+                            }}
+                            className="flex w-full items-center justify-between p-4 text-right hover:bg-surface-2 transition-colors"
+                            aria-expanded={isOpen}
+                          >
+                            <div className="flex items-start gap-3">
+                              <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary font-bold text-xs mt-0.5">
+                                {toPersianDigits(idx + 1)}
+                              </span>
+                              <div>
+                                <span className="text-[13px] font-semibold text-ink-3 block mb-0.5">
+                                  {item.category}
+                                </span>
+                                <h4 className="text-sm font-bold text-ink">
+                                  {item.q}
+                                </h4>
+                              </div>
+                            </div>
+                            {isOpen ? (
+                              <ChevronUp className="h-5 w-5 text-ink-3 flex-shrink-0" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5 text-ink-3 flex-shrink-0" />
+                            )}
+                          </button>
+
+                          {isOpen && (
+                            <div className="border-t border-line bg-surface-2 p-5 text-sm text-ink-2 space-y-3 leading-relaxed animate-fadeIn">
+                              <p className="font-normal">{item.a}</p>
+                              <div className="rounded-xl bg-warning-soft p-3.5 border border-warning/20">
+                                <span className="text-[13px] font-bold text-warning-ink block mb-0.5">
+                                  تمرین ۶۰ ثانیه‌ای:
+                                </span>
+                                <p className="text-sm text-warning-ink font-medium">
+                                  {item.task}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Practice / Challenges Section */}
+                {(libraryFilter === 'all' || libraryFilter === 'practice') && filteredChallenges.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-ink-2">
+                      <Award className="h-4 w-4 text-accent" />
+                      <span>چالش‌های کشف و ارزیابی ({toPersianDigits(filteredChallenges.length)} چالش):</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {filteredChallenges.map((c) => {
+                        const originalIndex = CHALLENGES.indexOf(c);
+                        const isDone = answeredChallenges.includes(String(originalIndex));
+                        return (
+                          <div
+                            key={originalIndex}
+                            className="flex flex-col justify-between rounded-2xl border border-line bg-surface p-4 shadow-sm"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between border-b border-line pb-2 mb-2">
+                                <span className="text-xs font-bold text-accent">
+                                  {c.type}
+                                </span>
+                                {isDone && (
+                                  <span className="text-xs font-bold text-success">
+                                    ✓ پاسخ داده شده
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-ink line-clamp-2">
+                                {c.q}
+                              </p>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setChallengeIndex(originalIndex);
+                                setChallengeAnswered(false);
+                                setSelectedChallengeOption(null);
+                                handleNavigate('challenge');
+                              }}
+                              className="mt-3 inline-flex items-center justify-center gap-1 rounded-xl bg-surface-2 px-3 py-1.5 text-xs font-bold text-ink hover:bg-line"
+                            >
+                              <span>ورود به چالش</span>
+                              <ArrowLeft className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* SCREEN: DECISIONS (فهرست پرونده‌های من) */}
         {/* ============================================================== */}
         {screen === 'decisions' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="flex items-center justify-between rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between rounded-3xl border border-line bg-surface p-6 shadow-sm">
               <div>
-                <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                  بایگانی خصوصی
+                <span className="text-xs font-bold text-primary">
+                  {content.site.pageIntros.decisions.kicker}
                 </span>
-                <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                  پرونده‌های تصمیم من
+                <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                  {content.site.pageIntros.decisions.title}
                 </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  اطلاعات محرمانه در همین مرورگر ذخیره شده و قابل ویرایش و بازنگری است.
+                <p className="mt-1 text-sm text-ink-3">
+                  {content.site.pageIntros.decisions.desc}
                 </p>
               </div>
 
               <button
                 onClick={() => handleNavigate('newDecision')}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all whitespace-nowrap"
+                className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-surface shadow-sm hover:bg-primary-hover transition-all whitespace-nowrap"
               >
                 <PlusCircle className="h-4 w-4" />
                 <span>تصمیم جدید</span>
@@ -1686,17 +2049,17 @@ export default function App() {
             </div>
 
             {decisions.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center dark:border-slate-700 dark:bg-slate-900">
-                <FolderOpen className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-                <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+              <div className="rounded-3xl border border-dashed border-line-strong bg-surface p-12 text-center">
+                <FolderOpen className="h-12 w-12 mx-auto text-ink-3 mb-3" />
+                <h3 className="text-base font-bold text-ink">
                   هنوز پرونده‌ای ثبت نکرده‌اید
                 </h3>
-                <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
-                  هر زمان تصمیمی مهم (خرید، سرمایه‌گذاری، استخدام یا تغییر استراتژی) در پیش داشتید، با ایجاد یک پرونده آن را در ۲۰ پرسش بسنجید.
+                <p className="mt-1 text-sm text-ink-2 max-w-sm mx-auto">
+                  هر زمان تصمیمی مهم در پیش داشتید، با ایجاد یک پرونده آن را در {toPersianDigits(QUESTIONS.length)} پرسش بسنجید.
                 </p>
                 <button
                   onClick={() => handleNavigate('newDecision')}
-                  className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all"
+                  className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-surface shadow-sm hover:bg-primary-hover transition-all"
                 >
                   <PlusCircle className="h-4 w-4" />
                   <span>ساخت نخستین پرونده</span>
@@ -1705,53 +2068,82 @@ export default function App() {
             ) : (
               <div className="space-y-3">
                 {decisions.map((d) => {
-                  const answeredCount = Object.keys(d.answers).length;
-                  const percent = Math.round((answeredCount / 20) * 100);
+                  const answeredCount = getAnsweredCount(d);
+                  const percent = Math.round((answeredCount / QUESTIONS.length) * 100);
 
                   return (
                     <div
                       key={d.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 transition-all hover:border-slate-300"
+                      className="flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5 shadow-sm transition-all hover:border-line-strong"
                     >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mb-1">
-                          <Calendar className="h-3 w-3" />
-                          <span>ثبت: {formatDisplayDate(d.created)}</span>
-                          <span>·</span>
-                          <span className="font-bold text-blue-600 dark:text-blue-400">
-                            {toPersianDigits(answeredCount)} از {toPersianDigits(20)} پاسخ
-                          </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 text-[13px] text-ink-3 mb-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            <span>ثبت: {formatDisplayDate(d.created)}</span>
+                            <span>·</span>
+                            <span className="font-bold text-primary">
+                              {toPersianDigits(answeredCount)} از {toPersianDigits(QUESTIONS.length)} پاسخ ({toPersianDigits(percent)}٪)
+                            </span>
+                          </div>
+                          <h3 className="text-base font-bold text-ink">
+                            {d.title}
+                          </h3>
+                          <p className="text-sm text-ink-2 mt-1 line-clamp-1">
+                            {d.problem}
+                          </p>
                         </div>
-                        <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                          {d.title}
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-1">
-                          {d.problem}
-                        </p>
+
+                        {/* Card action buttons */}
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          <button
+                            onClick={() => setEditingDecision(d)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-surface-2 text-ink-2 hover:bg-line"
+                            aria-label="ویرایش عنوان و صورت مسئله"
+                            title="ویرایش"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteDecision(d.id)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-surface-2 text-danger hover:bg-danger-soft"
+                            aria-label="حذف این پرونده"
+                            title="حذف"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setActiveDecisionId(d.id);
+                              handleNavigate('report');
+                            }}
+                            className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-line shadow-sm"
+                          >
+                            <span>مشاهده شناسنامه</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setActiveDecisionId(d.id);
+                              setQuestionIndex(getFirstUnansweredIndex(d));
+                              handleNavigate('question');
+                            }}
+                            className="flex items-center gap-1 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
+                          >
+                            <span>{answeredCount === QUESTIONS.length ? 'بازنگری چک‌لیست' : 'ادامه پاسخ‌ها'}</span>
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setActiveDecisionId(d.id);
-                            handleNavigate('report');
-                          }}
-                          className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 shadow-sm"
-                        >
-                          <span>مشاهده شناسنامه</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setActiveDecisionId(d.id);
-                            setQuestionIndex(0);
-                            handleNavigate('question');
-                          }}
-                          className="flex items-center gap-1 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
-                        >
-                          <span>{answeredCount === 20 ? 'بازنگری چک‌لیست' : 'ادامه پاسخ‌ها'}</span>
-                          <ArrowLeft className="h-3.5 w-3.5" />
-                        </button>
+                      {/* Real progress bar */}
+                      <div className="h-1.5 w-full bg-surface-2 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-300 rounded-full"
+                          style={{ width: `${percent}%` }}
+                        />
                       </div>
                     </div>
                   );
@@ -1766,20 +2158,20 @@ export default function App() {
         {/* ============================================================== */}
         {screen === 'newDecision' && (
           <div className="flex flex-col gap-5 text-right">
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                گام آغازین
+            <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm">
+              <span className="text-xs font-bold text-primary">
+                {content.site.pageIntros.newDecision.kicker}
               </span>
-              <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                تصمیمی که قصد بررسی آن را دارید چیست؟
+              <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                {content.site.pageIntros.newDecision.title}
               </h2>
-              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                اصل طلایی درنگ: صورت مسئله را بدون گنجاندن راه‌حل محبوب در آن بنویسید تا ذهن برای ارزیابی گزینه‌های رقیب مسدود نشود.
+              <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                {content.site.pageIntros.newDecision.desc}
               </p>
 
               <form onSubmit={handleCreateDecision} className="mt-6 space-y-4">
                 <div>
-                  <label htmlFor="dTitle" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  <label htmlFor="dTitle" className="block text-xs font-bold text-ink mb-1.5">
                     عنوان خلاصه تصمیم
                   </label>
                   <input
@@ -1790,12 +2182,12 @@ export default function App() {
                     placeholder="مثلاً: انتخاب شیوه تامین مالی پروژه جدید"
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white transition-all text-right"
+                    className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary transition-all text-right"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="dProblem" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  <label htmlFor="dProblem" className="block text-xs font-bold text-ink mb-1.5">
                     مسئله را در یک جمله صریح بنویسید
                   </label>
                   <textarea
@@ -1806,13 +2198,13 @@ export default function App() {
                     placeholder="صورت مسئله را بدون اینکه بگویید «باید فلان کار را بکنیم» شرح دهید..."
                     value={newProblem}
                     onChange={(e) => setNewProblem(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white transition-all text-right"
+                    className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary transition-all text-right"
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="dWhy" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    چرا این تصمیم مهم و سرنوشت‌ساز است؟ <span className="text-slate-400 font-normal">(اختیاری)</span>
+                  <label htmlFor="dWhy" className="block text-xs font-bold text-ink mb-1.5">
+                    چرا این تصمیم مهم و سرنوشت‌ساز است؟ <span className="text-ink-3 font-normal">(اختیاری)</span>
                   </label>
                   <textarea
                     id="dWhy"
@@ -1821,22 +2213,22 @@ export default function App() {
                     placeholder="پیامدها، هزینه‌ها، ریسک‌ها یا چرایی حساس بودن موعد تصمیم..."
                     value={newWhy}
                     onChange={(e) => setNewWhy(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white transition-all text-right"
+                    className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary transition-all text-right"
                   />
                 </div>
 
-                <div className="flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+                <div className="flex items-center justify-between border-t border-line pt-4">
                   <button
                     type="button"
                     onClick={() => handleNavigate('home')}
-                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+                    className="rounded-xl border border-line px-4 py-2.5 text-xs font-bold text-ink-2 hover:bg-surface-2"
                   >
                     انصراف
                   </button>
 
                   <button
                     type="submit"
-                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 active:scale-95 transition-all"
+                    className="flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-surface shadow-sm hover:bg-primary-hover active:scale-95 transition-all"
                   >
                     <span>ایجاد پرونده و ورود به چک‌لیست</span>
                     <ArrowLeft className="h-4 w-4" />
@@ -1850,449 +2242,602 @@ export default function App() {
         {/* ============================================================== */}
         {/* SCREEN: QUESTION (چک‌لیست ایستگاه‌ها و پرسش‌ها) */}
         {/* ============================================================== */}
-        {screen === 'question' && currentDecision && (
-          <div className="flex flex-col gap-5 text-right">
-            {/* Station Progress Dots Header */}
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400">
-                    ایستگاه {toPersianDigits(QUESTIONS[questionIndex].station + 1)} از ۵:
-                  </span>
-                  <span className="text-xs font-black text-slate-900 dark:text-white">
-                    {STATIONS[QUESTIONS[questionIndex].station].title}
-                  </span>
-                </div>
-                <span className="text-xs font-bold text-slate-500 tabular-nums">
-                  پرسش {toPersianDigits(questionIndex + 1)} از ۲۰
-                </span>
-              </div>
-
-              {/* Station Dots Visual */}
-              <div className="mt-3 flex items-center gap-1.5">
-                {STATIONS.map((_, sIdx) => {
-                  const currentStation = QUESTIONS[questionIndex].station;
-                  return (
-                    <div
-                      key={sIdx}
-                      className={`h-2 flex-1 rounded-full transition-all ${
-                        sIdx < currentStation
-                          ? 'bg-emerald-600'
-                          : sIdx === currentStation
-                          ? 'bg-blue-600'
-                          : 'bg-slate-200 dark:bg-slate-700'
-                      }`}
-                    />
-                  );
-                })}
-              </div>
-              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                {STATIONS[QUESTIONS[questionIndex].station].desc}
-              </p>
+        {screen === 'question' && (
+          !currentDecision ? (
+            <div className="rounded-3xl border border-line bg-surface p-8 text-center space-y-4">
+              <FolderOpen className="h-12 w-12 mx-auto text-ink-3" />
+              <h3 className="text-base font-bold text-ink">پرونده‌ای انتخاب نشده است</h3>
+              <p className="text-sm text-ink-2">برای ارزیابی چک‌لیست، لطفاً ابتدا یک پرونده را باز کنید یا تصمیم جدیدی ثبت نمایید.</p>
+              <button
+                onClick={() => handleNavigate('decisions')}
+                className="rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
+              >
+                رفتن به پرونده‌ها
+              </button>
             </div>
-
-            {/* Question Card */}
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-5">
-              {QUESTIONS[questionIndex].critical && (
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-[11px] font-bold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60">
-                  <ShieldAlert className="h-3.5 w-3.5" />
-                  <span>پرسش حساس و خط قرمز (عدم پاسخ روشن مانع از اجراست)</span>
+          ) : (
+            <div className="flex flex-col gap-5 text-right">
+              {/* Station Progress Header */}
+              <div className="rounded-3xl border border-line bg-surface p-5 shadow-sm space-y-3">
+                <div className="flex items-center justify-between border-b border-line pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-primary">
+                      ایستگاه {toPersianDigits(QUESTIONS[questionIndex].station + 1)} از {toPersianDigits(STATIONS.length)}:
+                    </span>
+                    <span className="text-xs font-bold text-ink">
+                      {STATIONS[QUESTIONS[questionIndex].station].title}
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold text-ink-3 tabular-nums">
+                    پرسش {toPersianDigits(questionIndex + 1)} از {toPersianDigits(QUESTIONS.length)}
+                  </span>
                 </div>
-              )}
 
-              <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-relaxed">
-                {QUESTIONS[questionIndex].text}
-              </h3>
-
-              {/* Question Help / 60s Exercise Toggle */}
-              <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  onClick={() => {
-                    playSoundEffect('tap', settings.sound, settings.fxVolume);
-                    setActiveQuestionHint(activeQuestionHint === 'help' ? 'none' : 'help');
-                  }}
-                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
-                    activeQuestionHint === 'help'
-                      ? 'border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
-                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                  }`}
-                >
-                  <HelpCircle className="h-3.5 w-3.5" />
-                  <span>این سؤال یعنی چه؟</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    playSoundEffect('tap', settings.sound, settings.fxVolume);
-                    setActiveQuestionHint(activeQuestionHint === 'exercise' ? 'none' : 'exercise');
-                  }}
-                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
-                    activeQuestionHint === 'exercise'
-                      ? 'border-amber-600 bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                  }`}
-                >
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>تمرین ۶۰ ثانیه‌ای</span>
-                </button>
-              </div>
-
-              {/* Hint Box */}
-              {activeQuestionHint !== 'none' && (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 leading-relaxed animate-fadeIn">
-                  <strong className="block font-bold text-slate-900 dark:text-white mb-1">
-                    {activeQuestionHint === 'help' ? 'شرح و منطق سؤال:' : 'تمرین پیشنهادی:'}
-                  </strong>
-                  {activeQuestionHint === 'help'
-                    ? QUESTIONS[questionIndex].help
-                    : QUESTIONS[questionIndex].exercise}
-                </div>
-              )}
-
-              {/* 3 Answer Choice Buttons */}
-              <div>
-                <span className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-                  وضعیت در تصمیم شما:
-                </span>
-                <div className="grid grid-cols-3 gap-2.5">
-                  {[
-                    { val: 'yes' as AnswerValue, label: 'بله (انجام شده)', color: 'emerald' },
-                    { val: 'no' as AnswerValue, label: 'خیر (انجام نشده)', color: 'rose' },
-                    { val: 'unknown' as AnswerValue, label: 'نامشخص / مبهم', color: 'amber' },
-                  ].map((choice) => {
-                    const currentAnswer = currentDecision.answers[QUESTIONS[questionIndex].id]?.value;
-                    const isSelected = currentAnswer === choice.val;
-
-                    let activeClass = 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 text-slate-700 dark:text-slate-200';
-                    if (isSelected) {
-                      if (choice.val === 'yes') {
-                        activeClass = 'border-emerald-600 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200 font-extrabold shadow-sm';
-                      } else if (choice.val === 'no') {
-                        activeClass = 'border-rose-600 bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200 font-extrabold shadow-sm';
-                      } else {
-                        activeClass = 'border-amber-600 bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200 font-extrabold shadow-sm';
-                      }
-                    }
-
+                {/* Stations Bar */}
+                <div className="flex items-center gap-1.5">
+                  {STATIONS.map((_, sIdx) => {
+                    const currentStation = QUESTIONS[questionIndex].station;
                     return (
-                      <button
-                        key={choice.val}
-                        onClick={() => handleAnswerQuestion(choice.val)}
-                        className={`min-h-[50px] rounded-xl border p-2 text-center text-xs font-semibold transition-all active:scale-95 ${activeClass}`}
-                      >
-                        {choice.label}
-                      </button>
+                      <div
+                        key={sIdx}
+                        className={`h-2 flex-1 rounded-full transition-all ${
+                          sIdx < currentStation
+                            ? 'bg-success'
+                            : sIdx === currentStation
+                            ? 'bg-primary'
+                            : 'bg-line-strong'
+                        }`}
+                      />
                     );
                   })}
                 </div>
+
+                {/* Per-question dot row for the current station */}
+                <div className="pt-2 border-t border-line flex items-center justify-between">
+                  <span className="text-xs text-ink-3">پرسش‌های این ایستگاه:</span>
+                  <div className="flex items-center gap-1.5">
+                    {QUESTIONS.map((q, idx) => {
+                      if (q.station !== QUESTIONS[questionIndex].station) return null;
+                      const ansVal = currentDecision.answers[q.id]?.value;
+                      const isCurrent = idx === questionIndex;
+
+                      let dotClass = 'bg-line-strong';
+                      if (ansVal === 'yes') dotClass = 'bg-success';
+                      else if (ansVal === 'no') dotClass = 'bg-danger';
+                      else if (ansVal === 'unknown') dotClass = 'bg-warning';
+
+                      return (
+                        <button
+                          key={q.id}
+                          onClick={() => {
+                            playSoundEffect('tap', settings.sound, settings.fxVolume);
+                            setQuestionIndex(idx);
+                            setActiveQuestionHint('none');
+                          }}
+                          className={`h-3 w-3 rounded-full transition-all ${dotClass} ${
+                            isCurrent ? 'ring-2 ring-primary ring-offset-2 scale-125' : 'hover:opacity-80'
+                          }`}
+                          aria-label={`پرسش ${toPersianDigits(idx + 1)}`}
+                          title={`پرسش ${toPersianDigits(idx + 1)}`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <p className="text-xs text-ink-3">
+                  {STATIONS[QUESTIONS[questionIndex].station].desc}
+                </p>
               </div>
 
-              {/* Note / Evidence Input */}
-              <div>
-                <label
-                  htmlFor="qNote"
-                  className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5"
-                >
-                  یادداشت، منبع شواهد یا اقدام لازم <span className="text-slate-400 font-normal">(اختیاری)</span>
-                </label>
-                <textarea
-                  id="qNote"
-                  rows={2}
-                  value={currentDecision.answers[QUESTIONS[questionIndex].id]?.note || ''}
-                  onChange={(e) => handleUpdateNote(e.target.value)}
-                  placeholder="چه دلیلی برای این پاسخ دارید؟ چه کاری باید پیش از جلسه بعدی انجام شود؟"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white transition-all text-right"
-                />
-              </div>
+              {/* Question Card */}
+              <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm space-y-5">
+                {QUESTIONS[questionIndex].critical && (
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-3 py-1 text-xs font-bold text-danger-ink border border-danger/30">
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    <span>پرسش حساس و خط قرمز (عدم پاسخ روشن مانع از اجراست)</span>
+                  </div>
+                )}
 
-              {/* Prev / Next Navigation Controls */}
-              <div className="flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
-                <button
-                  disabled={questionIndex === 0}
-                  onClick={() => {
-                    playSoundEffect('tap', settings.sound, settings.fxVolume);
-                    setQuestionIndex((prev) => Math.max(0, prev - 1));
-                    setActiveQuestionHint('none');
-                  }}
-                  className="flex items-center gap-1 rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none dark:border-slate-700 dark:text-slate-300"
-                >
-                  <ArrowRight className="h-3.5 w-3.5" />
-                  <span>پرسش قبلی</span>
-                </button>
+                <h3 className="text-lg sm:text-xl font-bold text-ink leading-relaxed">
+                  {QUESTIONS[questionIndex].text}
+                </h3>
 
-                <div className="flex items-center gap-2">
+                {/* Question Help / 60s Exercise Toggle */}
+                <div className="flex flex-wrap gap-2 pt-1">
                   <button
-                    onClick={() => handleNavigate('report')}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    onClick={() => {
+                      playSoundEffect('tap', settings.sound, settings.fxVolume);
+                      setActiveQuestionHint(activeQuestionHint === 'help' ? 'none' : 'help');
+                    }}
+                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
+                      activeQuestionHint === 'help'
+                        ? 'border-primary bg-primary-soft text-primary-ink'
+                        : 'border-line bg-surface-2 text-ink-2 hover:bg-line'
+                    }`}
                   >
-                    مشاهده شناسنامه
+                    <HelpCircle className="h-3.5 w-3.5" />
+                    <span>این سؤال یعنی چه؟</span>
                   </button>
 
                   <button
                     onClick={() => {
                       playSoundEffect('tap', settings.sound, settings.fxVolume);
-                      if (questionIndex >= QUESTIONS.length - 1) {
-                        handleNavigate('report');
-                      } else {
-                        setQuestionIndex((prev) => prev + 1);
-                        setActiveQuestionHint('none');
-                      }
+                      setActiveQuestionHint(activeQuestionHint === 'exercise' ? 'none' : 'exercise');
                     }}
-                    className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
+                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
+                      activeQuestionHint === 'exercise'
+                        ? 'border-warning bg-warning-soft text-warning-ink'
+                        : 'border-line bg-surface-2 text-ink-2 hover:bg-line'
+                    }`}
                   >
-                    <span>{questionIndex === QUESTIONS.length - 1 ? 'مشاهده پرونده' : 'پرسش بعدی'}</span>
-                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>تمرین ۶۰ ثانیه‌ای</span>
                   </button>
+                </div>
+
+                {/* Hint Box */}
+                {activeQuestionHint !== 'none' && (
+                  <div className="rounded-2xl border border-line bg-surface-2 p-4 text-sm text-ink-2 leading-relaxed animate-fadeIn">
+                    <strong className="block font-bold text-ink mb-1">
+                      {activeQuestionHint === 'help' ? 'شرح و منطق سؤال:' : 'تمرین پیشنهادی:'}
+                    </strong>
+                    {activeQuestionHint === 'help'
+                      ? QUESTIONS[questionIndex].help
+                      : QUESTIONS[questionIndex].exercise}
+                  </div>
+                )}
+
+                {/* 3 Answer Choice Buttons */}
+                <div>
+                  <span className="block text-xs font-bold text-ink mb-2">
+                    وضعیت در تصمیم شما:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {[
+                      { val: 'yes' as AnswerValue, label: 'بله (انجام شده)', type: 'success' },
+                      { val: 'no' as AnswerValue, label: 'خیر (انجام نشده)', type: 'danger' },
+                      { val: 'unknown' as AnswerValue, label: 'نامشخص / مبهم', type: 'warning' },
+                    ].map((choice) => {
+                      const currentAnswer = currentDecision.answers[QUESTIONS[questionIndex].id]?.value;
+                      const isSelected = currentAnswer === choice.val;
+
+                      let activeClass = 'border-line bg-surface hover:bg-surface-2 text-ink';
+                      if (isSelected) {
+                        if (choice.val === 'yes') {
+                          activeClass = 'border-success bg-success-soft text-success-ink font-bold shadow-sm';
+                        } else if (choice.val === 'no') {
+                          activeClass = 'border-danger bg-danger-soft text-danger-ink font-bold shadow-sm';
+                        } else {
+                          activeClass = 'border-warning bg-warning-soft text-warning-ink font-bold shadow-sm';
+                        }
+                      }
+
+                      return (
+                        <button
+                          key={choice.val}
+                          aria-pressed={isSelected}
+                          onClick={() => handleAnswerQuestion(choice.val)}
+                          className={`min-h-[50px] rounded-xl border p-2 text-center text-xs font-bold transition-all active:scale-95 ${activeClass}`}
+                        >
+                          {choice.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Note / Evidence Input */}
+                <div>
+                  <label
+                    htmlFor="qNote"
+                    className="block text-xs font-bold text-ink mb-1.5"
+                  >
+                    یادداشت، منبع شواهد یا اقدام لازم <span className="text-ink-3 font-normal">(اختیاری)</span>
+                  </label>
+                  <textarea
+                    id="qNote"
+                    rows={2}
+                    value={currentDecision.answers[QUESTIONS[questionIndex].id]?.note || ''}
+                    onChange={(e) => handleUpdateNote(e.target.value)}
+                    placeholder="چه دلیلی برای این پاسخ دارید؟ چه کاری باید پیش از جلسه بعدی انجام شود؟"
+                    className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary transition-all text-right"
+                  />
+                </div>
+
+                {/* Prev / Next Navigation Controls */}
+                <div className="flex items-center justify-between border-t border-line pt-4">
+                  <button
+                    disabled={questionIndex === 0}
+                    onClick={() => {
+                      playSoundEffect('tap', settings.sound, settings.fxVolume);
+                      setQuestionIndex((prev) => Math.max(0, prev - 1));
+                      setActiveQuestionHint('none');
+                    }}
+                    className="flex items-center gap-1 rounded-xl border border-line px-3.5 py-2 text-xs font-bold text-ink hover:bg-surface-2 disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                    <span>پرسش قبلی</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleNavigate('report')}
+                      className="rounded-xl border border-line bg-surface px-3 py-2 text-xs font-bold text-ink hover:bg-surface-2"
+                    >
+                      مشاهده شناسنامه
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        playSoundEffect('tap', settings.sound, settings.fxVolume);
+                        if (questionIndex >= QUESTIONS.length - 1) {
+                          handleNavigate('report');
+                        } else {
+                          setQuestionIndex((prev) => prev + 1);
+                          setActiveQuestionHint('none');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
+                    >
+                      <span>{questionIndex === QUESTIONS.length - 1 ? 'مشاهده پرونده' : 'پرسش بعدی'}</span>
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )
         )}
 
         {/* ============================================================== */}
         {/* SCREEN: REPORT (شناسنامه و گزارش تصمیم) */}
         {/* ============================================================== */}
-        {screen === 'report' && currentDecision && (
-          <div className="flex flex-col gap-5 text-right">
-            {/* Header */}
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-start justify-between">
+        {screen === 'report' && (
+          !currentDecision ? (
+            <div className="rounded-3xl border border-line bg-surface p-8 text-center space-y-4">
+              <FolderOpen className="h-12 w-12 mx-auto text-ink-3" />
+              <h3 className="text-base font-bold text-ink">پرونده‌ای انتخاب نشده است</h3>
+              <p className="text-sm text-ink-2">برای مشاهده گزارش، لطفاً ابتدا یک پرونده را انتخاب فرمایید.</p>
+              <button
+                onClick={() => handleNavigate('decisions')}
+                className="rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
+              >
+                رفتن به پرونده‌ها
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5 text-right">
+              {/* Header */}
+              <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm print-card space-y-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-primary">
+                      شناسنامه تحلیلی
+                    </span>
+                    <h2 className="mt-1 text-xl sm:text-2xl font-extrabold text-ink">
+                      {currentDecision.title}
+                    </h2>
+                    <p className="mt-2 text-sm text-ink-2 leading-relaxed">
+                      <strong>صورت مسئله:</strong> {currentDecision.problem}
+                    </p>
+                    {currentDecision.why && (
+                      <p className="mt-1.5 text-sm text-ink-2 leading-relaxed">
+                        <strong>اهمیت تصمیم:</strong> {currentDecision.why}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center gap-1.5 rounded-xl border border-line bg-surface-2 px-3 py-1.5 text-xs font-bold text-ink hover:bg-line no-print"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    <span>چاپ / PDF</span>
+                  </button>
+                </div>
+
+                {/* Tabular Numerals Metrics Strip */}
+                {(() => {
+                  const ans = currentDecision.answers;
+                  const yesCount = QUESTIONS.filter((q) => ans[q.id]?.value === 'yes').length;
+                  const noCount = QUESTIONS.filter((q) => ans[q.id]?.value === 'no').length;
+                  const unkCount = QUESTIONS.filter((q) => ans[q.id]?.value === 'unknown').length;
+                  const pendingCount = QUESTIONS.length - (yesCount + noCount + unkCount);
+
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="rounded-2xl border border-success/30 bg-success-soft p-3.5 text-center">
+                        <span className="text-xl sm:text-2xl font-bold text-success-ink tabular-nums">
+                          {toPersianDigits(yesCount)}
+                        </span>
+                        <span className="block text-xs font-bold text-success-ink mt-0.5">
+                          روشن و انجام‌شده
+                        </span>
+                      </div>
+
+                      <div className="rounded-2xl border border-danger/30 bg-danger-soft p-3.5 text-center">
+                        <span className="text-xl sm:text-2xl font-bold text-danger-ink tabular-nums">
+                          {toPersianDigits(noCount)}
+                        </span>
+                        <span className="block text-xs font-bold text-danger-ink mt-0.5">
+                          نیازمند اقدام اصلاحی
+                        </span>
+                      </div>
+
+                      <div className="rounded-2xl border border-warning/30 bg-warning-soft p-3.5 text-center">
+                        <span className="text-xl sm:text-2xl font-bold text-warning-ink tabular-nums">
+                          {toPersianDigits(unkCount)}
+                        </span>
+                        <span className="block text-xs font-bold text-warning-ink mt-0.5">
+                          نامشخص / مبهم
+                        </span>
+                      </div>
+
+                      <div className="rounded-2xl border border-line bg-surface-2 p-3.5 text-center">
+                        <span className="text-xl sm:text-2xl font-bold text-ink tabular-nums">
+                          {toPersianDigits(pendingCount)}
+                        </span>
+                        <span className="block text-xs font-bold text-ink-3 mt-0.5">
+                          پاسخ‌داده‌نشده
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Critical Warning */}
+                {(() => {
+                  const unresolvedCritical = QUESTIONS.filter(
+                    (q) => q.critical && currentDecision.answers[q.id]?.value !== 'yes'
+                  );
+
+                  if (unresolvedCritical.length > 0) {
+                    return (
+                      <div className="rounded-2xl border border-danger/30 bg-danger-soft p-4">
+                        <div className="flex items-center gap-2 text-danger-ink font-bold text-xs mb-1">
+                          <AlertTriangle className="h-4 w-4" />
+                          <span>
+                            هشدار بحرانی: {toPersianDigits(unresolvedCritical.length)} پرسش حساس هنوز روشن نیست!
+                          </span>
+                        </div>
+                        <p className="text-sm text-danger-ink leading-relaxed">
+                          پیش از اجرای این تصمیم، حتماً موارد زیر را تعیین تکلیف کنید:
+                        </p>
+                        <ul className="mt-2 space-y-1 list-disc list-inside text-xs text-danger-ink">
+                          {unresolvedCritical.map((cq) => (
+                            <li key={cq.id}>{cq.text}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="rounded-2xl border border-success/30 bg-success-soft p-3.5 text-xs text-success-ink font-medium">
+                        ✓ تمام پرسش‌های حساس دارای پاسخ روشن هستند. این امر ضریب اطمینان تصمیم را ارتقا می‌دهد.
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
+
+              {/* Open Items Section */}
+              <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm print-card space-y-4">
                 <div>
-                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                    شناسنامه تحلیلی
-                  </span>
-                  <h2 className="mt-1 text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-                    {currentDecision.title}
-                  </h2>
-                  <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                    صورت مسئله: {currentDecision.problem}
+                  <h3 className="text-base font-bold text-ink mb-1">
+                    موضوعات باز و اقدامات ضروری
+                  </h3>
+                  <p className="text-xs text-ink-3">
+                    مواردی که در چک‌لیست با «خیر» یا «نامشخص» علامت زده‌اید:
                   </p>
                 </div>
 
-                <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                  <span>چاپ / PDF</span>
-                </button>
-              </div>
+                {(() => {
+                  const openItems = QUESTIONS.filter((q) => {
+                    const val = currentDecision.answers[q.id]?.value;
+                    return val === 'no' || val === 'unknown';
+                  });
 
-              {/* Tabular Numerals Metrics Strip */}
-              {(() => {
-                const ans = currentDecision.answers;
-                const yesCount = QUESTIONS.filter((q) => ans[q.id]?.value === 'yes').length;
-                const noCount = QUESTIONS.filter((q) => ans[q.id]?.value === 'no').length;
-                const unkCount = QUESTIONS.filter((q) => ans[q.id]?.value === 'unknown').length;
-                const pendingCount = 20 - (yesCount + noCount + unkCount);
-
-                return (
-                  <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 text-center dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                      <span className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
-                        {toPersianDigits(yesCount)}
-                      </span>
-                      <span className="block text-[11px] font-bold text-emerald-800 dark:text-emerald-300 mt-0.5">
-                        روشن و انجام‌شده
-                      </span>
-                    </div>
-
-                    <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-3.5 text-center dark:border-rose-900/40 dark:bg-rose-950/20">
-                      <span className="text-xl sm:text-2xl font-black text-rose-700 dark:text-rose-400 tabular-nums">
-                        {toPersianDigits(noCount)}
-                      </span>
-                      <span className="block text-[11px] font-bold text-rose-800 dark:text-rose-300 mt-0.5">
-                        نیازمند اقدام اصلاحی
-                      </span>
-                    </div>
-
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3.5 text-center dark:border-amber-900/40 dark:bg-amber-950/20">
-                      <span className="text-xl sm:text-2xl font-black text-amber-700 dark:text-amber-400 tabular-nums">
-                        {toPersianDigits(unkCount)}
-                      </span>
-                      <span className="block text-[11px] font-bold text-amber-800 dark:text-amber-300 mt-0.5">
-                        نامشخص / مبهم
-                      </span>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-center dark:border-slate-800 dark:bg-slate-800/40">
-                      <span className="text-xl sm:text-2xl font-black text-slate-700 dark:text-slate-300 tabular-nums">
-                        {toPersianDigits(pendingCount)}
-                      </span>
-                      <span className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mt-0.5">
-                        پاسخ‌داده‌نشده
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Critical Questions Warning */}
-              {(() => {
-                const unresolvedCritical = QUESTIONS.filter(
-                  (q) => q.critical && currentDecision.answers[q.id]?.value !== 'yes'
-                );
-
-                if (unresolvedCritical.length > 0) {
-                  return (
-                    <div className="mt-5 rounded-2xl border border-rose-300 bg-rose-50/80 p-4 dark:border-rose-900/60 dark:bg-rose-950/30">
-                      <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300 font-bold text-xs mb-1">
-                        <AlertTriangle className="h-4 w-4" />
-                        <span>
-                          هشدار بحرانی: {toPersianDigits(unresolvedCritical.length)} پرسش حساس هنوز روشن نیست!
-                        </span>
+                  if (openItems.length === 0) {
+                    return (
+                      <div className="rounded-2xl border border-dashed border-line p-6 text-center text-sm text-ink-3">
+                        هیچ موضوع باز یا مبهمی ثبت نشده است.
                       </div>
-                      <p className="text-xs text-rose-900 dark:text-rose-200 leading-relaxed">
-                        پیش از اجرای این تصمیم، حتماً موارد زیر را تعیین تکلیف کنید:
-                      </p>
-                      <ul className="mt-2 space-y-1 list-disc list-inside text-xs text-rose-800 dark:text-rose-300">
-                        {unresolvedCritical.map((cq) => (
-                          <li key={cq.id}>{cq.text}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                } else {
+                    );
+                  }
+
                   return (
-                    <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 text-xs text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 font-medium">
-                      ✓ تمام پرسش‌های حساس دارای پاسخ روشن هستند. این امر ضریب اطمینان تصمیم را ارتقا می‌دهد.
-                    </div>
-                  );
-                }
-              })()}
-            </div>
+                    <div className="space-y-3">
+                      {openItems.map((q) => {
+                        const ans = currentDecision.answers[q.id];
+                        return (
+                          <div
+                            key={q.id}
+                            className="rounded-2xl border border-line bg-surface-2 p-4 space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-bold text-ink">
+                                {q.text}
+                              </span>
+                              <span
+                                className={`text-[13px] font-bold px-2 py-0.5 rounded-full ${
+                                  ans?.value === 'no'
+                                    ? 'bg-danger-soft text-danger-ink'
+                                    : 'bg-warning-soft text-warning-ink'
+                                }`}
+                              >
+                                {ans?.value === 'no' ? 'خیر' : 'نامشخص'}
+                              </span>
+                            </div>
 
-            {/* Open Items Section */}
-            <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <h3 className="text-base font-extrabold text-slate-900 dark:text-white mb-2">
-                موضوعات باز و اقدامات ضروری
-              </h3>
-              <p className="text-xs text-slate-500 mb-4">
-                مواردی که در چک‌لیست با «خیر» یا «نامشخص» علامت زده‌اید:
-              </p>
-
-              {(() => {
-                const openItems = QUESTIONS.filter((q) => {
-                  const val = currentDecision.answers[q.id]?.value;
-                  return val === 'no' || val === 'unknown';
-                });
-
-                if (openItems.length === 0) {
-                  return (
-                    <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-500">
-                      هیچ موضوع باز یا مبهمی ثبت نشده است.
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="space-y-3">
-                    {openItems.map((q) => {
-                      const ans = currentDecision.answers[q.id];
-                      return (
-                        <div
-                          key={q.id}
-                          className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-850"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-900 dark:text-white">
-                              {q.text}
-                            </span>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                ans?.value === 'no'
-                                  ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                              }`}
-                            >
-                              {ans?.value === 'no' ? 'خیر' : 'نامشخص'}
-                            </span>
+                            {ans?.note ? (
+                              <div className="space-y-1 text-sm text-ink-2">
+                                <p>
+                                  <strong className="text-ink">یادداشت شما: </strong>
+                                  {ans.note}
+                                </p>
+                                <p className="text-xs text-ink-3">
+                                  <strong className="text-ink-2">تمرین پیشنهادی: </strong>
+                                  {q.exercise}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-ink-2">
+                                <strong className="text-ink">تمرین پیشنهادی: </strong>
+                                {q.exercise}
+                              </p>
+                            )}
                           </div>
-                          <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
-                            <strong>اقدام پیشنهادی: </strong>
-                            {ans?.note || q.exercise}
-                          </p>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                {/* Review Date with Jalali Picker & Circuit Breaker */}
+                <div className="border-t border-line pt-5 space-y-4">
+                  {/* Jalali Date Picker */}
+                  <div>
+                    <label className="block text-xs font-bold text-ink mb-1.5">
+                      موعد بازنگری نهایی تصمیم (تقویم هجری شمسی)
+                    </label>
+
+                    {(() => {
+                      const curJalali = isoToJalali(currentDecision.reviewDate);
+                      const baseJalali = getCurrentJalaliDate();
+                      const years = Array.from({ length: 6 }).map((_, i) => baseJalali.jy + i);
+
+                      const updateJalaliDate = (newJy: number, newJm: number, newJd: number) => {
+                        const isoStr = jalaliToIso(newJy, newJm, newJd);
+                        setDecisions((prev) =>
+                          prev.map((d) => (d.id === currentDecision.id ? { ...d, reviewDate: isoStr } : d))
+                        );
+                      };
+
+                      return (
+                        <div className="flex items-center gap-2 max-w-sm">
+                          {/* Day */}
+                          <select
+                            value={curJalali.jd}
+                            onChange={(e) =>
+                              updateJalaliDate(curJalali.jy, curJalali.jm, parseInt(e.target.value, 10))
+                            }
+                            aria-label="روز بازنگری"
+                            className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-right"
+                          >
+                            {Array.from({ length: 31 }).map((_, i) => (
+                              <option key={i + 1} value={i + 1}>
+                                {toPersianDigits(i + 1)}
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* Month */}
+                          <select
+                            value={curJalali.jm}
+                            onChange={(e) =>
+                              updateJalaliDate(curJalali.jy, parseInt(e.target.value, 10), curJalali.jd)
+                            }
+                            aria-label="ماه بازنگری"
+                            className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-right flex-1"
+                          >
+                            {JALALI_MONTH_NAMES.map((name, i) => (
+                              <option key={i + 1} value={i + 1}>
+                                {name}
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* Year */}
+                          <select
+                            value={curJalali.jy}
+                            onChange={(e) =>
+                              updateJalaliDate(parseInt(e.target.value, 10), curJalali.jm, curJalali.jd)
+                            }
+                            aria-label="سال بازنگری"
+                            className="rounded-xl border border-line bg-surface-2 px-3 py-2 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-right"
+                          >
+                            {years.map((y) => (
+                              <option key={y} value={y}>
+                                {toPersianDigits(y)}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       );
-                    })}
+                    })()}
                   </div>
-                );
-              })()}
 
-              {/* Review Date and Stop Signal Formulation */}
-              <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800 space-y-4">
-                <div>
-                  <label htmlFor="revDate" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    موعد بازنگری نهایی تصمیم
-                  </label>
-                  <input
-                    id="revDate"
-                    type="date"
-                    value={currentDecision.reviewDate || ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setDecisions((prev) =>
-                        prev.map((d) => (d.id === currentDecision.id ? { ...d, reviewDate: val } : d))
-                      );
-                    }}
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white text-right"
-                  />
+                  {/* Circuit Breaker text */}
+                  <div>
+                    <label htmlFor="stopSig" className="block text-xs font-bold text-ink mb-1.5">
+                      علامت توقف اضطراری یا بازنگری (Circuit Breaker)
+                    </label>
+                    <textarea
+                      id="stopSig"
+                      rows={2}
+                      value={currentDecision.stopSignal || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDecisions((prev) =>
+                          prev.map((d) => (d.id === currentDecision.id ? { ...d, stopSignal: val } : d))
+                        );
+                      }}
+                      placeholder="در صورت مشاهده چه نشانه‌ای، اجرای این تصمیم باید بی‌درنگ متوقف و بازنگری شود؟"
+                      className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2 text-sm text-ink focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary transition-all text-right no-print"
+                    />
+                    {/* Read-only copy for print */}
+                    <div className="print-only text-sm text-ink p-2 border border-line rounded-xl mt-1">
+                      {currentDecision.stopSignal || 'نشانه‌ای ثبت نشده است.'}
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label htmlFor="stopSig" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    علامت توقف اضطراری یا بازنگری (Circuit Breaker)
-                  </label>
-                  <textarea
-                    id="stopSig"
-                    rows={2}
-                    value={currentDecision.stopSignal || ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setDecisions((prev) =>
-                        prev.map((d) => (d.id === currentDecision.id ? { ...d, stopSignal: val } : d))
-                      );
-                    }}
-                    placeholder="در صورت مشاهده چه نشانه‌ای، اجرای این تصمیم باید بی‌درنگ متوقف و بازنگری شود؟"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white transition-all text-right"
-                  />
+                <div className="flex flex-col sm:flex-row items-center justify-between border-t border-line pt-4 gap-2 no-print">
+                  <button
+                    onClick={() => handleNavigate('question')}
+                    className="rounded-xl border border-line px-4 py-2 text-xs font-bold text-ink-2 hover:bg-surface-2"
+                  >
+                    بازگشت به سؤالات
+                  </button>
+
+                  <div className="flex flex-col items-end gap-1">
+                    <button
+                      onClick={() => {
+                        showToast('پرونده با موفقیت ذخیره شد.');
+                        handleNavigate('decisions');
+                      }}
+                      className="rounded-xl bg-primary px-5 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
+                    >
+                      بازگشت به فهرست پرونده‌ها
+                    </button>
+                    <span className="text-[13px] text-ink-3">
+                      تغییرات به‌صورت خودکار ذخیره می‌شوند.
+                    </span>
+                  </div>
                 </div>
-              </div>
-
-              <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
-                <button
-                  onClick={() => handleNavigate('question')}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
-                >
-                  بازگشت به سؤالات
-                </button>
-
-                <button
-                  onClick={() => {
-                    showToast('پرونده با موفقیت ذخیره شد.');
-                    handleNavigate('decisions');
-                  }}
-                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 shadow-sm"
-                >
-                  تأیید و ذخیره پرونده
-                </button>
               </div>
             </div>
-          </div>
+          )
+        )}
+        {screen === 'admin' && (
+          <AdminPanel onBackToApp={() => setScreen('home')} />
         )}
       </main>
 
-      {/* Mobile Fixed Bottom Navigation Bar */}
-      <BottomNav
-        currentScreen={screen}
-        onNavigate={handleNavigate}
-        decisionCount={decisions.length}
-      />
+      {/* Bottom Navigation (Hidden on admin screen for maximum workspace) */}
+      {screen !== 'admin' && (
+        <BottomNav
+          currentScreen={screen}
+          onNavigate={handleNavigate}
+          decisionCount={decisions.length}
+        />
+      )}
 
-      {/* Toast Notification Banner */}
+      {/* Toast Notification */}
       {toastMessage && (
         <div
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 rounded-2xl bg-slate-900/95 px-4 py-2.5 text-xs font-bold text-white shadow-xl backdrop-blur-md dark:bg-slate-100 dark:text-slate-900 animate-slideUp text-center"
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 rounded-2xl bg-ink text-canvas px-4 py-2.5 text-sm font-bold shadow-sm animate-slideUp text-center"
           role="status"
           aria-live="polite"
         >
@@ -2300,7 +2845,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Global Modals */}
+      {/* Modals */}
       {activeModal === 'settings' && (
         <SettingsModal
           settings={settings}
@@ -2312,20 +2857,59 @@ export default function App() {
           onBackup={handleBackupDownload}
           onRestore={handleRestoreFile}
           onClearData={handleClearAllData}
+          onNavigateToAdmin={() => {
+            setActiveModal('none');
+            setScreen('admin');
+          }}
         />
       )}
 
-      {activeModal === 'tour' && <TourModal onClose={() => setActiveModal('none')} />}
+      {activeModal === 'tour' && (
+        <TourModal
+          onClose={() => setActiveModal('none')}
+          tourSlides={content.tour}
+        />
+      )}
 
       {activeModal === 'help' && (
         <HelpModal
           screen={screen}
           onClose={() => setActiveModal('none')}
           onOpenTour={() => setActiveModal('tour')}
+          helpEntries={content.help}
         />
       )}
 
-      {activeModal === 'video' && <VideoPlayerModal onClose={() => setActiveModal('none')} />}
+      {activeModal === 'video' && (
+        <VideoPlayerModal
+          onClose={() => setActiveModal('none')}
+          title={content.videos[0]?.title}
+          badge={content.videos[0]?.badge}
+          description={content.videos[0]?.desc}
+          videoUrl={content.videos[0]?.videoUrl}
+          posterUrl={content.videos[0]?.posterUrl}
+          quote={content.videos[0]?.quote}
+          reflectionQuestion={content.videos[0]?.reflectionQuestion}
+          whyImportant={content.videos[0]?.whyImportant}
+        />
+      )}
+
+      {editingDecision && (
+        <EditDecisionModal
+          decision={editingDecision}
+          onClose={() => setEditingDecision(null)}
+          onSave={handleSaveEditedDecision}
+        />
+      )}
     </div>
   );
 }
+
+export default function App() {
+  return (
+    <ContentProvider>
+      <DerangApp />
+    </ContentProvider>
+  );
+}
+

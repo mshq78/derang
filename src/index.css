@@ -1,39 +1,163 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    --font-scale: 1;
-  }
-  
-  html {
-    font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: calc(16px * var(--font-scale, 1));
-    -webkit-tap-highlight-color: transparent;
-    scroll-behavior: smooth;
-  }
+@custom-variant dark (&:where(.dark, .dark *));
 
-  body {
-    font-feature-settings: "ss01" on, "cv01" on;
-  }
+@theme {
+  --color-canvas: var(--c-canvas);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-ink: var(--c-ink);
+  --color-ink-2: var(--c-ink-2);
+  --color-ink-3: var(--c-ink-3);
+  --color-primary: var(--c-primary);
+  --color-primary-hover: var(--c-primary-hover);
+  --color-primary-soft: var(--c-primary-soft);
+  --color-primary-ink: var(--c-primary-ink);
+  --color-success: var(--c-success);
+  --color-success-soft: var(--c-success-soft);
+  --color-success-ink: var(--c-success-ink);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-danger-ink: var(--c-danger-ink);
+  --color-warning: var(--c-warning);
+  --color-warning-soft: var(--c-warning-soft);
+  --color-warning-ink: var(--c-warning-ink);
+  --color-accent: var(--c-accent);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-accent-ink: var(--c-accent-ink);
 
-  /* Accessible focus rings */
-  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
-    outline: 2px solid #2563eb;
-    outline-offset: 2px;
+  --animate-fadeIn: fadeIn 180ms ease-out forwards;
+  --animate-slideUp: slideUp 220ms ease-out forwards;
+  --animate-confettiPop: confettiPop 1100ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
   }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes confettiPop {
+  0% {
+    transform: translate(0, 0) scale(0.6) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--x), var(--y)) rotate(var(--r));
+    opacity: 0;
+  }
+}
+
+:root {
+  --font-scale: 1;
+  --c-canvas: #F4F1EA;        /* page background: warm ivory paper */
+  --c-surface: #FBFAF6;       /* cards, modals: off-white, never #FFFFFF */
+  --c-surface-2: #EFEBE3;     /* inner panels, inputs, secondary buttons */
+  --c-line: #E3DDD2;          /* borders */
+  --c-line-strong: #CFC7B8;
+  --c-ink: #2F3238;           /* main text: soft charcoal, never pure black */
+  --c-ink-2: #555A63;         /* secondary text */
+  --c-ink-3: #7D828B;         /* muted text, placeholders */
+  --c-primary: #3F6E8A;       /* muted steel-blue: primary buttons, active tab */
+  --c-primary-hover: #355E77;
+  --c-primary-soft: #E2ECF1;
+  --c-primary-ink: #2C5570;   /* text on primary-soft */
+  --c-success: #4E8A6A;
+  --c-success-soft: #E4EFE8;
+  --c-success-ink: #336049;
+  --c-danger: #B25E57;
+  --c-danger-soft: #F5E5E2;
+  --c-danger-ink: #8E433D;
+  --c-warning: #B5873A;
+  --c-warning-soft: #F5ECDA;
+  --c-warning-ink: #7E5C22;
+  --c-accent: #76679A;        /* replaces purple (challenge section) */
+  --c-accent-soft: #ECE8F2;
+  --c-accent-ink: #574A7A;
+}
+
+.dark {
+  --c-canvas: #1E2126;
+  --c-surface: #262A30;
+  --c-surface-2: #2E333A;
+  --c-line: #3A4048;
+  --c-line-strong: #4A515B;
+  --c-ink: #E7E3DB;
+  --c-ink-2: #B9B5AD;
+  --c-ink-3: #8D8A84;
+  --c-primary: #7FA8C2;
+  --c-primary-hover: #93B7CD;
+  --c-primary-soft: #2B3A45;
+  --c-primary-ink: #B8D2E2;
+  --c-success: #7DB396;
+  --c-success-soft: #27372E;
+  --c-success-ink: #B4D6C3;
+  --c-danger: #D18D86;
+  --c-danger-soft: #3F2B29;
+  --c-danger-ink: #EBC0BB;
+  --c-warning: #D2AE6E;
+  --c-warning-soft: #3D3424;
+  --c-warning-ink: #EBD6AE;
+  --c-accent: #A99BCB;
+  --c-accent-soft: #332E40;
+  --c-accent-ink: #D3CAE8;
 }
 
 .high-contrast {
-  --tw-border-opacity: 1;
-  filter: contrast(1.15);
+  --c-canvas: #F7F5F0;
+  --c-surface: #FFFFFF;
+  --c-line: #8A8A8A;
+  --c-line-strong: #5A5A5A;
+  --c-ink: #111111;
+  --c-ink-2: #2A2A2A;
+  --c-ink-3: #444444;
+  --c-primary: #1F4E6B;
+  --c-primary-hover: #173D54;
 }
 
-.high-contrast body {
-  background-color: #ffffff !important;
-  color: #020617 !important;
+html, body {
+  background: var(--c-canvas);
+  color: var(--c-ink);
 }
 
-/* Custom scrollbars */
+html {
+  font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: calc(16px * var(--font-scale, 1));
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  line-height: 1.85;
+  font-feature-settings: "ss01" on, "cv01" on;
+}
+
+/* Accessible focus ring */
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+/* Scrollbar utilities */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -42,9 +166,44 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
+  background: var(--c-line-strong);
   border-radius: 9999px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html.reduce-motion, html.reduce-motion * {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Print styles */
+.print-only {
+  display: none;
+}
+
+@media print {
+  header, nav, .no-print {
+    display: none !important;
+  }
+  body, html {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .print-card {
+    box-shadow: none !important;
+    border: 1px solid #999 !important;
+    break-inside: avoid;
+  }
+  .print-only {
+    display: block !important;
+  }
 }
