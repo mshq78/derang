@@ -4,7 +4,7 @@ export const DEFAULT_CONTENT: ContentBundle = {
   version: '1.0.0',
   updatedAt: '2026-09-26T12:00:00.000Z',
   site: {
-    brandName: 'دِرانْـگ',
+    brandName: 'درنگ',
     orgName: 'پردیس نوآوری گِرا',
     tagline: 'سامانه تصمیم‌گیری هوشیار',
     heroKicker: 'همراه اختصاصی تصمیم‌گیری',

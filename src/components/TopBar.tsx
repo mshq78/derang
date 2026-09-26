@@ -38,7 +38,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenHelp,
   onOpenSettings,
   onExit,
-  brandName = 'دِرانْـگ',
+  brandName = 'درنگ',
   orgName = 'پردیس نوآوری گِرا',
   tagline = 'سامانه تصمیم‌گیری هوشیار',
 }) => {

@@ -5,7 +5,7 @@ type Base = {
 };
 
 export interface SiteSettings {
-  brandName: string;            // "دِرانْـگ"
+  brandName: string;            // "درنگ"
   orgName: string;              // "پردیس نوآوری گِرا"
   tagline: string;              // "سامانه تصمیم‌گیری هوشیار"
   heroKicker: string;           // "همراه اختصاصی تصمیم‌گیری"

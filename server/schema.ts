@@ -62,4 +62,15 @@ async function init(): Promise<void> {
   if (meta.length === 0) {
     await writeBundle(DEFAULT_CONTENT, 'seed');
   }
+  await migrate();
+}
+
+/** One-off data fixes. Each only touches rows still holding the old value. */
+async function migrate(): Promise<void> {
+  // Brand name spelling changed from «دِرانْـگ» to «درنگ».
+  await getDb().query(
+    `UPDATE site_settings SET data = jsonb_set(data, '{brandName}', to_jsonb($2::text)), updated_at = now()
+     WHERE id = 1 AND data->>'brandName' = $1`,
+    ['دِرانْـگ', 'درنگ']
+  );
 }
