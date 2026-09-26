@@ -47,7 +47,6 @@ import {
   BookQA,
   Challenge,
 } from './types/content';
-import { DEFAULT_CONTENT } from './data/defaultContent';
 import {
   toPersianDigits,
   formatDisplayDate,
@@ -86,61 +85,70 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light',
 };
 
-const DEFAULT_LEARNING_STEPS = [
-  { id: 'why', title: '۱. چرا اصلاً به «درنگ» نیاز داریم؟', desc: 'کالبدشکافی نقاط کور، نقاط ناشنوا و نقاط لال.', screen: 'why' as Screen },
-  { id: 'perimeters', title: '۲. ده دام پنهان در مدل PERIMETERS', desc: 'از قدرت و ایگو تا هویت و داستان‌سرایی؛ ابزار تشخیص سوگیری‌ها.', screen: 'perimeters' as Screen },
-  { id: 'skills', title: '۳. هفت شایستگی رهبری هوشیار', desc: 'شایستگی‌های رفتار تصمیم‌گیرنده: ذهن باز، واقعیت‌سنجی، شنیدن مخالف.', screen: 'skills' as Screen },
-  { id: 'sonic', title: '۴. ابزارهای پنج‌گانه SONIC در لحظه', desc: 'تکنیک‌های ۵ چرا، حذف فرضی گزینه اول، آزمون احتمال و اصطکاک تصمیم.', screen: 'sonic' as Screen },
-  { id: 'people', title: '۵. پنج الگوی تصمیم‌گیری (شخصیت‌ها)', desc: 'داوینچی، لینکلن، ادیسون، چرچیل و اینشتین؛ نقطه قوت و روی دیگر آن.', screen: 'people' as Screen },
-  { id: 'stories', title: '۶. روایت‌ها و عبرت‌های زنده', desc: 'ماجرای تایتان، اصفهان، ترابانت، پالو آلتو و ویدئوی شاه سلطان حسین.', screen: 'stories' as Screen },
-  { id: 'challenge', title: '۷. چالش‌های کشف و تمرین تعاملی', desc: 'سنجش موقعیت‌های واقعی، تشخیص دام و دریافت بازخورد سازنده.', screen: 'challenge' as Screen },
-];
-
 function DerangApp() {
   const { content } = useContent();
 
-  // Dynamic content mapping with fallback to bundled defaults
+  // Dynamic content mapping - published items only, sorted by sortOrder
   const STATIONS = useMemo(() => {
-    const pub = content.stations.filter((s: Station) => s.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_CONTENT.stations;
+    return [...content.stations]
+      .filter((s: Station) => s.isPublished)
+      .sort((a: Station, b: Station) => a.sortOrder - b.sortOrder);
   }, [content.stations]);
 
   const QUESTIONS = useMemo(() => {
-    const pub = content.questions.filter((q: Question) => q.isPublished);
-    const sourceQuestions = pub.length > 0 ? pub : DEFAULT_CONTENT.questions;
-    const sourceStations = content.stations.filter((s: Station) => s.isPublished);
-    const stationsList = sourceStations.length > 0 ? sourceStations : DEFAULT_CONTENT.stations;
-    const idToIdx = new Map(stationsList.map((s, i) => [s.id, i]));
-    return sourceQuestions.map((q: Question) => ({
+    const pubStations = [...content.stations]
+      .filter((s: Station) => s.isPublished)
+      .sort((a: Station, b: Station) => a.sortOrder - b.sortOrder);
+    const stationIndexMap = new Map<string, number>(pubStations.map((s, i) => [s.id, i]));
+
+    const pubQuestions = [...content.questions]
+      .filter((q: Question) => q.isPublished && stationIndexMap.has(q.stationId));
+
+    pubQuestions.sort((a, b) => {
+      const stA = stationIndexMap.get(a.stationId)!;
+      const stB = stationIndexMap.get(b.stationId)!;
+      if (stA !== stB) {
+        return stA - stB;
+      }
+      return a.sortOrder - b.sortOrder;
+    });
+
+    return pubQuestions.map((q: Question) => ({
       id: q.id,
-      station: idToIdx.get(q.stationId) ?? 0,
+      station: stationIndexMap.get(q.stationId)!,
+      stationId: q.stationId,
       text: q.text,
       help: q.help,
       exercise: q.exercise,
       critical: q.critical,
+      sortOrder: q.sortOrder,
     }));
   }, [content.questions, content.stations]);
 
   const PERIMETERS = useMemo(() => {
-    const pub = content.perimeters.filter((p: Perimeter) => p.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_CONTENT.perimeters;
+    return [...content.perimeters]
+      .filter((p: Perimeter) => p.isPublished)
+      .sort((a: Perimeter, b: Perimeter) => a.sortOrder - b.sortOrder);
   }, [content.perimeters]);
 
   const SKILLS = useMemo(() => {
-    const pub = content.skills.filter((s: Skill) => s.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_CONTENT.skills;
+    return [...content.skills]
+      .filter((s: Skill) => s.isPublished)
+      .sort((a: Skill, b: Skill) => a.sortOrder - b.sortOrder);
   }, [content.skills]);
 
   const SONIC = useMemo(() => {
-    const pub = content.sonic.filter((s: SonicTool) => s.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_CONTENT.sonic;
+    return [...content.sonic]
+      .filter((s: SonicTool) => s.isPublished)
+      .sort((a: SonicTool, b: SonicTool) => a.sortOrder - b.sortOrder);
   }, [content.sonic]);
 
   const PEOPLE = useMemo(() => {
-    const pub = content.people.filter((p: Person) => p.isPublished);
-    const sourcePeople = pub.length > 0 ? pub : DEFAULT_CONTENT.people;
+    const pubPeople = [...content.people]
+      .filter((p: Person) => p.isPublished)
+      .sort((a: Person, b: Person) => a.sortOrder - b.sortOrder);
     const res: Record<string, ArchetypeDef> = {};
-    sourcePeople.forEach((p: Person) => {
+    pubPeople.forEach((p: Person) => {
       res[p.id] = {
         id: p.id,
         name: p.name,
@@ -158,10 +166,12 @@ function DerangApp() {
   }, [content.people]);
 
   const AUDIO_STORIES = useMemo(() => {
-    const pub = content.audioStories.filter((a: AudioStory) => a.isPublished);
-    const sourceAudio = pub.length > 0 ? pub : DEFAULT_CONTENT.audioStories;
-    return sourceAudio.map((a: AudioStory) => ({
+    const pubAudio = [...content.audioStories]
+      .filter((a: AudioStory) => a.isPublished)
+      .sort((a: AudioStory, b: AudioStory) => a.sortOrder - b.sortOrder);
+    return pubAudio.map((a: AudioStory) => ({
       key: a.id,
+      id: a.id,
       title: a.title,
       subtitle: a.subtitle,
       dur: toPersianDigits(formatDuration(a.durationSeconds)),
@@ -172,30 +182,42 @@ function DerangApp() {
       takeaway: a.takeaway,
       audioUrl: a.audioUrl,
       coverUrl: a.coverUrl,
+      sortOrder: a.sortOrder,
     }));
   }, [content.audioStories]);
 
+  const VIDEOS = useMemo(() => {
+    return [...content.videos]
+      .filter((v: VideoItem) => v.isPublished)
+      .sort((a: VideoItem, b: VideoItem) => a.sortOrder - b.sortOrder);
+  }, [content.videos]);
+
+  const STORIES_VIDEOS = useMemo(() => {
+    return VIDEOS.filter((v: VideoItem) => v.showOnStories);
+  }, [VIDEOS]);
+
   const BOOK_QA = useMemo(() => {
-    const pub = content.bookQA.filter((b: BookQA) => b.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_CONTENT.bookQA;
+    return [...content.bookQA]
+      .filter((b: BookQA) => b.isPublished)
+      .sort((a: BookQA, b: BookQA) => a.sortOrder - b.sortOrder);
   }, [content.bookQA]);
 
   const CHALLENGES = useMemo(() => {
-    const pub = content.challenges.filter((c: Challenge) => c.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_CONTENT.challenges;
+    return [...content.challenges]
+      .filter((c: Challenge) => c.isPublished)
+      .sort((a: Challenge, b: Challenge) => a.sortOrder - b.sortOrder);
   }, [content.challenges]);
 
   const LEARNING_STEPS = useMemo(() => {
-    const pub = content.learningSteps.filter((l) => l.isPublished);
-    if (pub.length > 0) {
-      return pub.map((l) => ({
+    return [...content.learningSteps]
+      .filter((l) => l.isPublished)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((l) => ({
         id: l.id,
         title: l.title,
         desc: l.desc,
         screen: l.screen as Screen,
       }));
-    }
-    return DEFAULT_LEARNING_STEPS;
   }, [content.learningSteps]);
   const [profile, setProfile] = useState<UserProfile>(() => {
     try {
@@ -318,9 +340,15 @@ function DerangApp() {
 
   // Modals & Feedback
   const [activeModal, setActiveModal] = useState<'none' | 'help' | 'settings' | 'tour' | 'video'>('none');
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [editingDecision, setEditingDecision] = useState<DecisionRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const activeVideo = useMemo(() => {
+    if (!activeVideoId) return VIDEOS[0] || null;
+    return VIDEOS.find((v) => v.id === activeVideoId) || VIDEOS[0] || null;
+  }, [VIDEOS, activeVideoId]);
 
   // New Decision Form State
   const [newTitle, setNewTitle] = useState('');
@@ -412,8 +440,9 @@ function DerangApp() {
   };
 
   const nextLearningStep = useMemo(() => {
+    if (LEARNING_STEPS.length === 0) return null;
     return LEARNING_STEPS.find((s) => !learningDone.includes(s.id)) || LEARNING_STEPS[LEARNING_STEPS.length - 1];
-  }, [learningDone]);
+  }, [LEARNING_STEPS, learningDone]);
 
   // Count answered questions (only yes, no, unknown)
   const getAnsweredCount = (d: DecisionRecord) => {
@@ -423,6 +452,7 @@ function DerangApp() {
   };
 
   const getFirstUnansweredIndex = (d: DecisionRecord) => {
+    if (QUESTIONS.length === 0) return 0;
     const idx = QUESTIONS.findIndex(
       (q) => !d.answers[q.id] || !d.answers[q.id].value
     );
@@ -488,7 +518,7 @@ function DerangApp() {
   };
 
   const handleAnswerQuestion = (val: AnswerValue) => {
-    if (!activeDecisionId) return;
+    if (!activeDecisionId || !QUESTIONS[questionIndex]) return;
     const q = QUESTIONS[questionIndex];
     playSoundEffect('tap', settings.sound, settings.fxVolume);
     setDecisions((prev) =>
@@ -512,7 +542,7 @@ function DerangApp() {
   };
 
   const handleUpdateNote = (noteText: string) => {
-    if (!activeDecisionId) return;
+    if (!activeDecisionId || !QUESTIONS[questionIndex]) return;
     const q = QUESTIONS[questionIndex];
     setDecisions((prev) =>
       prev.map((d) => {
@@ -535,8 +565,9 @@ function DerangApp() {
   };
 
   const handleChallengeAnswer = (optionIdx: number) => {
-    if (challengeAnswered) return;
+    if (challengeAnswered || CHALLENGES.length === 0) return;
     const currentChallenge = CHALLENGES[challengeIndex % CHALLENGES.length];
+    if (!currentChallenge) return;
     const isCorrect = optionIdx === currentChallenge.ans;
     const challengeKey = String(challengeIndex);
 
@@ -574,6 +605,7 @@ function DerangApp() {
   };
 
   const handleNextChallenge = () => {
+    if (CHALLENGES.length === 0) return;
     playSoundEffect('tap', settings.sound, settings.fxVolume);
     setChallengeIndex((prev) => (prev + 1) % CHALLENGES.length);
     setChallengeAnswered(false);
@@ -690,7 +722,19 @@ function DerangApp() {
         s.tags.some((t) => normalizePersianText(t).includes(normalizedQuery))
       );
     });
-  }, [normalizedQuery]);
+  }, [AUDIO_STORIES, normalizedQuery]);
+
+  const filteredVideos = useMemo(() => {
+    return VIDEOS.filter((v) => {
+      if (!normalizedQuery) return true;
+      return (
+        normalizePersianText(v.title).includes(normalizedQuery) ||
+        normalizePersianText(v.desc).includes(normalizedQuery) ||
+        normalizePersianText(v.badge).includes(normalizedQuery) ||
+        (v.quote && normalizePersianText(v.quote).includes(normalizedQuery))
+      );
+    });
+  }, [VIDEOS, normalizedQuery]);
 
   const filteredBookQA = useMemo(() => {
     return BOOK_QA.filter((b) => {
@@ -701,7 +745,7 @@ function DerangApp() {
         normalizePersianText(b.category).includes(normalizedQuery)
       );
     });
-  }, [normalizedQuery]);
+  }, [BOOK_QA, normalizedQuery]);
 
   const filteredChallenges = useMemo(() => {
     return CHALLENGES.filter((c) => {
@@ -711,21 +755,13 @@ function DerangApp() {
         normalizePersianText(c.type).includes(normalizedQuery)
       );
     });
-  }, [normalizedQuery]);
-
-  const videoMatches = useMemo(() => {
-    if (!normalizedQuery) return true;
-    return (
-      normalizePersianText('شاه سلطان حسین؛ هزینه تعلل در تصمیم‌گیری').includes(normalizedQuery) ||
-      normalizePersianText('روایت طنزآمیز و درس‌آموز از پیامدهای ترس از اتخاذ تصمیمات سخت').includes(normalizedQuery)
-    );
-  }, [normalizedQuery]);
+  }, [CHALLENGES, normalizedQuery]);
 
   const hasAnyLibraryResults =
     filteredAudio.length > 0 ||
+    filteredVideos.length > 0 ||
     filteredBookQA.length > 0 ||
-    filteredChallenges.length > 0 ||
-    videoMatches;
+    filteredChallenges.length > 0;
 
   // Onboarding View
   if (!profile.first) {
@@ -897,91 +933,107 @@ function DerangApp() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Learning Next Step Card */}
               <div className="flex flex-col justify-between rounded-3xl border border-line bg-surface p-5 shadow-sm">
-                <div>
-                  <div className="flex items-center justify-between border-b border-line pb-3">
-                    <span className="text-xs font-bold text-warning-ink">
-                      گام بعدی یادگیری
-                    </span>
-                    <span className="text-[13px] font-semibold text-ink-3 tabular-nums">
-                      {toPersianDigits(learningDone.length)} از {toPersianDigits(LEARNING_STEPS.length)} ایستگاه
-                    </span>
+                {LEARNING_STEPS.length === 0 || !nextLearningStep ? (
+                  <div className="p-4 text-center text-sm text-ink-3">
+                    هنوز محتوایی برای این بخش منتشر نشده است.
                   </div>
-                  <h3 className="mt-3 text-base font-bold text-ink">
-                    {nextLearningStep.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-ink-2 leading-relaxed">
-                    با گذراندن این بخش، خطاهای قضاوت را بهتر تشخیص داده و چک‌لیست تصمیم را با تسلط بیشتری به کار می‌گیرید.
-                  </p>
-                </div>
+                ) : (
+                  <>
+                    <div>
+                      <div className="flex items-center justify-between border-b border-line pb-3">
+                        <span className="text-xs font-bold text-warning-ink">
+                          گام بعدی یادگیری
+                        </span>
+                        <span className="text-[13px] font-semibold text-ink-3 tabular-nums">
+                          {toPersianDigits(learningDone.length)} از {toPersianDigits(LEARNING_STEPS.length)} ایستگاه
+                        </span>
+                      </div>
+                      <h3 className="mt-3 text-base font-bold text-ink">
+                        {nextLearningStep.title}
+                      </h3>
+                      <p className="mt-1 text-sm text-ink-2 leading-relaxed">
+                        با گذراندن این بخش، خطاهای قضاوت را بهتر تشخیص داده و چک‌لیست تصمیم را با تسلط بیشتری به کار می‌گیرید.
+                      </p>
+                    </div>
 
-                <div className="mt-5 flex items-center justify-between pt-2">
-                  <div className="flex items-center gap-1">
-                    {LEARNING_STEPS.map((_, idx) => (
-                      <span
-                        key={idx}
-                        className={`h-2 rounded-full transition-all ${
-                          idx < learningDone.length ? 'w-4 bg-primary' : 'w-2 bg-line-strong'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => handleNavigate(nextLearningStep.screen)}
-                    className="flex items-center gap-1 rounded-xl bg-surface-2 px-3.5 py-2 text-xs font-bold text-ink hover:bg-line transition-colors"
-                  >
-                    <span>ادامه مسیر</span>
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                    <div className="mt-5 flex items-center justify-between pt-2">
+                      <div className="flex items-center gap-1">
+                        {LEARNING_STEPS.map((_, idx) => (
+                          <span
+                            key={idx}
+                            className={`h-2 rounded-full transition-all ${
+                              idx < learningDone.length ? 'w-4 bg-primary' : 'w-2 bg-line-strong'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => handleNavigate(nextLearningStep.screen)}
+                        className="flex items-center gap-1 rounded-xl bg-surface-2 px-3.5 py-2 text-xs font-bold text-ink hover:bg-line transition-colors"
+                      >
+                        <span>ادامه مسیر</span>
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* 2-Minute Discovery Challenge Card */}
               <div className="flex flex-col justify-between rounded-3xl border border-line bg-surface p-5 shadow-sm">
-                <div>
-                  <div className="flex items-center justify-between border-b border-line pb-3">
-                    <span className="text-xs font-bold text-accent">
-                      کشف ۲ دقیقه‌ای
-                    </span>
-                    <span className="text-[13px] font-bold text-success tabular-nums">
-                      {toPersianDigits(challengeCorrectCount)} امتیاز درست
-                    </span>
+                {CHALLENGES.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-ink-3">
+                    هنوز محتوایی برای این بخش منتشر نشده است.
                   </div>
-                  <h3 className="mt-3 text-base font-bold text-ink">
-                    چالش کشف دام‌ها و ابزارهای مکث
-                  </h3>
-                  <p className="mt-1 text-sm text-ink-2 leading-relaxed">
-                    یک سناریوی تصمیم‌گیری واقعی را بسنجید، بازخورد منطقی بگیرید و کارت‌های شخصیت را باز کنید.
-                  </p>
-                </div>
+                ) : (
+                  <>
+                    <div>
+                      <div className="flex items-center justify-between border-b border-line pb-3">
+                        <span className="text-xs font-bold text-accent">
+                          کشف ۲ دقیقه‌ای
+                        </span>
+                        <span className="text-[13px] font-bold text-success tabular-nums">
+                          {toPersianDigits(challengeCorrectCount)} امتیاز درست
+                        </span>
+                      </div>
+                      <h3 className="mt-3 text-base font-bold text-ink">
+                        چالش کشف دام‌ها و ابزارهای مکث
+                      </h3>
+                      <p className="mt-1 text-sm text-ink-2 leading-relaxed">
+                        یک سناریوی تصمیم‌گیری واقعی را بسنجید، بازخورد منطقی بگیرید و کارت‌های شخصیت را باز کنید.
+                      </p>
+                    </div>
 
-                {/* Collectible Cards Strip */}
-                <div className="mt-4 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                  {Object.keys(PEOPLE).map((pKey) => {
-                    const isUnlocked = unlockedArchetypes.includes(pKey);
-                    return (
-                      <span
-                        key={pKey}
-                        className={`flex h-8 px-2.5 items-center justify-center rounded-lg text-[13px] font-bold transition-all ${
-                          isUnlocked
-                            ? 'bg-primary-soft text-primary-ink border border-primary/20'
-                            : 'bg-surface-2 text-ink-3 border border-dashed border-line-strong'
-                        }`}
+                    {/* Collectible Cards Strip */}
+                    <div className="mt-4 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                      {Object.keys(PEOPLE).map((pKey) => {
+                        const isUnlocked = unlockedArchetypes.includes(pKey);
+                        return (
+                          <span
+                            key={pKey}
+                            className={`flex h-8 px-2.5 items-center justify-center rounded-lg text-[13px] font-bold transition-all ${
+                              isUnlocked
+                                ? 'bg-primary-soft text-primary-ink border border-primary/20'
+                                : 'bg-surface-2 text-ink-3 border border-dashed border-line-strong'
+                            }`}
+                          >
+                            {isUnlocked ? PEOPLE[pKey]?.name?.split(' ')[0] : '🔒'}
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        onClick={() => handleNavigate('challenge')}
+                        className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-surface hover:opacity-90 shadow-sm transition-all"
                       >
-                        {isUnlocked ? PEOPLE[pKey].name.split(' ')[0] : '🔒'}
-                      </span>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-4 flex justify-end">
-                  <button
-                    onClick={() => handleNavigate('challenge')}
-                    className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-surface hover:opacity-90 shadow-sm transition-all"
-                  >
-                    <span>ورود به چالش</span>
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                        <span>ورود به چالش</span>
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1047,7 +1099,7 @@ function DerangApp() {
                     <Layers className="h-4 w-4" />
                   </div>
                   <span className="text-sm font-bold text-ink">
-                    پنج الگوی تصمیم
+                    {toPersianDigits(Object.keys(PEOPLE).length)} الگوی تصمیم
                   </span>
                   <span className="text-[13px] text-ink-3 mt-0.5">
                     نقطه قوت و سایه افراط شخصیت‌ها
@@ -1076,7 +1128,7 @@ function DerangApp() {
 
               <div className="mt-5 flex items-center justify-between border-t border-line pt-4">
                 <span className="text-xs font-bold text-ink-2">
-                  میزان پیشرفت کلی: {toPersianDigits(Math.round((learningDone.length / LEARNING_STEPS.length) * 100))}٪
+                  میزان پیشرفت کلی: {LEARNING_STEPS.length > 0 ? toPersianDigits(Math.round((learningDone.length / LEARNING_STEPS.length) * 100)) : 0}٪
                 </span>
                 <button
                   onClick={() => {
@@ -1093,50 +1145,56 @@ function DerangApp() {
             </div>
 
             <div className="flex flex-col gap-3">
-              {LEARNING_STEPS.map((step, idx) => {
-                const isDone = learningDone.includes(step.id);
-                return (
-                  <div
-                    key={step.id}
-                    className={`flex items-center justify-between rounded-2xl border p-4.5 transition-all ${
-                      isDone
-                        ? 'border-success/30 bg-success-soft/30'
-                        : 'border-line bg-surface hover:border-line-strong'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
-                          isDone
-                            ? 'bg-success text-surface'
-                            : 'bg-surface-2 text-ink-2'
-                        }`}
-                      >
-                        {isDone ? '✓' : toPersianDigits(idx + 1)}
-                      </div>
-                      <div className="text-right">
-                        <h4 className="text-sm font-bold text-ink">
-                          {step.title}
-                        </h4>
-                        <p className="text-xs text-ink-3 mt-0.5 line-clamp-1">
-                          {step.desc}
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleNavigate(step.screen)}
-                      className={`flex-shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+              {LEARNING_STEPS.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center text-sm text-ink-3">
+                  هنوز محتوایی برای این بخش منتشر نشده است.
+                </div>
+              ) : (
+                LEARNING_STEPS.map((step, idx) => {
+                  const isDone = learningDone.includes(step.id);
+                  return (
+                    <div
+                      key={step.id}
+                      className={`flex items-center justify-between rounded-2xl border p-4.5 transition-all ${
                         isDone
-                          ? 'border border-line bg-surface text-ink hover:bg-surface-2'
-                          : 'bg-primary text-surface hover:bg-primary-hover shadow-sm'
+                          ? 'border-success/30 bg-success-soft/30'
+                          : 'border-line bg-surface hover:border-line-strong'
                       }`}
                     >
-                      {isDone ? 'مرور' : 'شروع'}
-                    </button>
-                  </div>
-                );
-              })}
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
+                            isDone
+                              ? 'bg-success text-surface'
+                              : 'bg-surface-2 text-ink-2'
+                          }`}
+                        >
+                          {isDone ? '✓' : toPersianDigits(idx + 1)}
+                        </div>
+                        <div className="text-right">
+                          <h4 className="text-sm font-bold text-ink">
+                            {step.title}
+                          </h4>
+                          <p className="text-xs text-ink-3 mt-0.5 line-clamp-1">
+                            {step.desc}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleNavigate(step.screen)}
+                        className={`flex-shrink-0 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                          isDone
+                            ? 'border border-line bg-surface text-ink hover:bg-surface-2'
+                            : 'bg-primary text-surface hover:bg-primary-hover shadow-sm'
+                        }`}
+                      >
+                        {isDone ? 'مرور' : 'شروع'}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -1224,48 +1282,54 @@ function DerangApp() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {PERIMETERS.map((p, idx) => (
-                  <div
-                    key={p.en}
-                    className="flex flex-col justify-between rounded-2xl border border-line bg-surface-2 p-4"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between border-b border-line pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary text-surface font-mono text-xs font-bold">
-                            {p.tag}
-                          </span>
-                          <span className="text-sm font-bold text-ink">
-                            {p.fa} ({p.en})
+              {PERIMETERS.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-ink-3">
+                  هنوز محتوایی برای این بخش منتشر نشده است.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {PERIMETERS.map((p, idx) => (
+                    <div
+                      key={p.en}
+                      className="flex flex-col justify-between rounded-2xl border border-line bg-surface-2 p-4"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between border-b border-line pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary text-surface font-mono text-xs font-bold">
+                              {p.tag}
+                            </span>
+                            <span className="text-sm font-bold text-ink">
+                              {p.fa} ({p.en})
+                            </span>
+                          </div>
+                          <span className="text-[13px] font-semibold text-ink-3">
+                            دام {toPersianDigits(idx + 1)} از ۱۰
                           </span>
                         </div>
-                        <span className="text-[13px] font-semibold text-ink-3">
-                          دام {toPersianDigits(idx + 1)} از ۱۰
-                        </span>
-                      </div>
-                      <p className="mt-2.5 text-sm text-ink-2 leading-relaxed">
-                        {p.desc}
-                      </p>
-                    </div>
-
-                    <div className="mt-3.5 space-y-2 border-t border-line pt-2.5">
-                      <div className="rounded-xl bg-warning-soft p-2.5 border border-warning/20">
-                        <span className="text-[13px] font-bold text-warning-ink block mb-0.5">
-                          پرسش درنگ:
-                        </span>
-                        <p className="text-[13px] text-warning-ink leading-relaxed font-medium">
-                          {p.question}
+                        <p className="mt-2.5 text-sm text-ink-2 leading-relaxed">
+                          {p.desc}
                         </p>
                       </div>
-                      <div className="text-[13px] text-ink-3">
-                        <strong className="text-ink">راهکار پادزهر: </strong>
-                        {p.solution}
+
+                      <div className="mt-3.5 space-y-2 border-t border-line pt-2.5">
+                        <div className="rounded-xl bg-warning-soft p-2.5 border border-warning/20">
+                          <span className="text-[13px] font-bold text-warning-ink block mb-0.5">
+                            پرسش درنگ:
+                          </span>
+                          <p className="text-[13px] text-warning-ink leading-relaxed font-medium">
+                            {p.question}
+                          </p>
+                        </div>
+                        <div className="text-[13px] text-ink-3">
+                          <strong className="text-ink">راهکار پادزهر: </strong>
+                          {p.solution}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
@@ -1304,26 +1368,32 @@ function DerangApp() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {SKILLS.map((skill, idx) => (
-                  <div
-                    key={skill.name}
-                    className="flex items-start gap-3 rounded-2xl border border-line bg-surface-2 p-4"
-                  >
-                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-ink font-bold text-xs mt-0.5">
-                      {toPersianDigits(idx + 1)}
+              {SKILLS.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-ink-3">
+                  هنوز محتوایی برای این بخش منتشر نشده است.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {SKILLS.map((skill, idx) => (
+                    <div
+                      key={skill.name}
+                      className="flex items-start gap-3 rounded-2xl border border-line bg-surface-2 p-4"
+                    >
+                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-ink font-bold text-xs mt-0.5">
+                        {toPersianDigits(idx + 1)}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-ink">
+                          {skill.name}
+                        </h4>
+                        <p className="mt-1 text-sm text-ink-2 leading-relaxed">
+                          {skill.desc}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-ink">
-                        {skill.name}
-                      </h4>
-                      <p className="mt-1 text-sm text-ink-2 leading-relaxed">
-                        {skill.desc}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
@@ -1362,36 +1432,42 @@ function DerangApp() {
                 </p>
               </div>
 
-              <div className="space-y-3.5">
-                {SONIC.map((tool) => (
-                  <div
-                    key={tool.letter}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-line bg-surface-2 p-4"
-                  >
-                    <div className="flex items-start sm:items-center gap-3">
-                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-surface font-black text-lg">
-                        {tool.letter}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-bold text-ink">
-                            {tool.fa}
-                          </h4>
-                          <span className="text-xs font-mono text-ink-3">
-                            ({tool.en})
-                          </span>
+              {SONIC.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-ink-3">
+                  هنوز محتوایی برای این بخش منتشر نشده است.
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {SONIC.map((tool) => (
+                    <div
+                      key={tool.letter}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-line bg-surface-2 p-4"
+                    >
+                      <div className="flex items-start sm:items-center gap-3">
+                        <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-primary text-surface font-black text-lg">
+                          {tool.letter}
                         </div>
-                        <span className="text-xs font-bold text-primary block mt-0.5">
-                          ابزار کلیدی: {tool.tool}
-                        </span>
-                        <p className="mt-1 text-sm text-ink-2 leading-relaxed">
-                          {tool.desc}
-                        </p>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-ink">
+                              {tool.fa}
+                            </h4>
+                            <span className="text-xs font-mono text-ink-3">
+                              ({tool.en})
+                            </span>
+                          </div>
+                          <span className="text-xs font-bold text-primary block mt-0.5">
+                            ابزار کلیدی: {tool.tool}
+                          </span>
+                          <p className="mt-1 text-sm text-ink-2 leading-relaxed">
+                            {tool.desc}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
@@ -1430,36 +1506,44 @@ function DerangApp() {
                 </p>
               </div>
 
-              <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-none">
-                {Object.keys(PEOPLE).map((id) => {
-                  const p = PEOPLE[id];
-                  const isActive = activeArchetype === id;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => {
-                        playSoundEffect('tap', settings.sound, settings.fxVolume);
-                        setActiveArchetype(id);
-                      }}
-                      className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
-                        isActive
-                          ? 'bg-primary text-surface shadow-sm'
-                          : 'bg-surface-2 text-ink-2 hover:bg-line'
-                      }`}
-                    >
-                      <span>{p.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              {Object.keys(PEOPLE).length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-ink-3">
+                  هنوز محتوایی برای این بخش منتشر نشده است.
+                </div>
+              ) : (
+                <>
+                  <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-none">
+                    {Object.keys(PEOPLE).map((id) => {
+                      const p = PEOPLE[id];
+                      const isActive = activeArchetype === id;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => {
+                            playSoundEffect('tap', settings.sound, settings.fxVolume);
+                            setActiveArchetype(id);
+                          }}
+                          className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                            isActive
+                              ? 'bg-primary text-surface shadow-sm'
+                              : 'bg-surface-2 text-ink-2 hover:bg-line'
+                          }`}
+                        >
+                          <span>{p.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-              <ArchetypeCard
-                archetype={PEOPLE[activeArchetype] || Object.values(PEOPLE)[0]}
-                externalTestUrl={content.site.externalTestUrl}
-                externalTestTitle={content.site.externalTestTitle}
-                externalTestSubtitle={content.site.externalTestSubtitle}
-                externalTestButton={content.site.externalTestButton}
-              />
+                  <ArchetypeCard
+                    archetype={PEOPLE[activeArchetype] || Object.values(PEOPLE)[0]}
+                    externalTestUrl={content.site.externalTestUrl}
+                    externalTestTitle={content.site.externalTestTitle}
+                    externalTestSubtitle={content.site.externalTestSubtitle}
+                    externalTestButton={content.site.externalTestButton}
+                  />
+                </>
+              )}
 
               <div className="flex items-center justify-between border-t border-line pt-4">
                 <button
@@ -1498,22 +1582,25 @@ function DerangApp() {
                 </p>
               </div>
 
-              {content.videos[0] && content.videos[0].showOnStories && (
-                <div className="rounded-2xl border border-line bg-surface-2 p-5">
+              {STORIES_VIDEOS.map((video) => (
+                <div key={video.id} className="rounded-2xl border border-line bg-surface-2 p-5">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
                       <span className="text-[13px] font-bold text-warning">
-                        {content.videos[0].badge}
+                        {video.badge}
                       </span>
                       <h3 className="text-base font-bold text-ink mt-0.5">
-                        {content.videos[0].title}
+                        {video.title}
                       </h3>
                       <p className="text-sm text-ink-2 mt-1 max-w-lg leading-relaxed">
-                        {content.videos[0].desc}
+                        {video.desc}
                       </p>
                     </div>
                     <button
-                      onClick={() => setActiveModal('video')}
+                      onClick={() => {
+                        setActiveVideoId(video.id);
+                        setActiveModal('video');
+                      }}
                       className="flex items-center gap-1.5 rounded-xl bg-warning px-4 py-2.5 text-xs font-bold text-surface shadow-sm hover:opacity-90 transition-all whitespace-nowrap"
                     >
                       <Video className="h-4 w-4" />
@@ -1521,15 +1608,21 @@ function DerangApp() {
                     </button>
                   </div>
                 </div>
-              )}
+              ))}
 
               <div className="space-y-4">
                 <h4 className="text-sm font-bold text-ink">
                   روایت‌های صوتی (پخش درون‌برنامه‌ای با متن کامل):
                 </h4>
-                {AUDIO_STORIES.map((story) => (
-                  <AudioPlayer key={story.key} story={story} volume={settings.volume} />
-                ))}
+                {AUDIO_STORIES.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-line p-6 text-center text-sm text-ink-3">
+                    هنوز محتوایی برای این بخش منتشر نشده است.
+                  </div>
+                ) : (
+                  AUDIO_STORIES.map((story) => (
+                    <AudioPlayer key={story.key} story={story} volume={settings.volume} />
+                  ))
+                )}
               </div>
 
               <div className="flex items-center justify-between border-t border-line pt-4">
@@ -1559,171 +1652,179 @@ function DerangApp() {
             {showConfetti && <Confetti onComplete={() => setShowConfetti(false)} isMotionEnabled={settings.motion} />}
 
             <div className="rounded-3xl border border-line bg-surface p-6 shadow-sm space-y-5">
-              <div className="flex items-center justify-between border-b border-line pb-3">
-                <div>
-                  <span className="text-xs font-bold text-accent">
-                    {content.site.pageIntros.challenge.kicker}
-                  </span>
-                  <h2 className="text-xl font-bold text-ink mt-0.5">
-                    {content.site.pageIntros.challenge.title} ({CHALLENGES[challengeIndex % CHALLENGES.length]?.type || 'دام‌یاب'})
-                  </h2>
+              {CHALLENGES.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-ink-3">
+                  هنوز محتوایی برای این بخش منتشر نشده است.
                 </div>
-                <div className="flex items-center gap-1.5 rounded-xl bg-accent-soft px-3 py-1.5 text-xs font-bold text-accent-ink">
-                  <Award className="h-4 w-4" />
-                  <span>{toPersianDigits(challengeCorrectCount)} پاسخ درست</span>
-                </div>
-              </div>
-
-              {/* Already Answered Notice */}
-              {answeredChallenges.includes(String(challengeIndex)) && (
-                <div className="inline-flex items-center gap-1.5 text-xs font-bold text-success bg-success-soft px-3 py-1 rounded-full">
-                  <span>✓ پاسخ داده شده</span>
-                </div>
-              )}
-
-              <div>
-                <p className="text-sm font-bold text-ink leading-relaxed">
-                  {CHALLENGES[challengeIndex % CHALLENGES.length].q}
-                </p>
-
-                <div role="radiogroup" aria-label="گزینه‌های پاسخ چالش" className="mt-5 space-y-2.5">
-                  {CHALLENGES[challengeIndex % CHALLENGES.length].opts.map((opt, optIdx) => {
-                    const isCorrectOption = optIdx === CHALLENGES[challengeIndex % CHALLENGES.length].ans;
-                    const isSelected = selectedChallengeOption === optIdx;
-
-                    let btnStyle = 'border-line bg-surface hover:bg-surface-2 text-ink';
-                    if (challengeAnswered) {
-                      if (isCorrectOption) {
-                        btnStyle = 'border-success bg-success-soft text-success-ink font-bold';
-                      } else if (isSelected) {
-                        btnStyle = 'border-danger bg-danger-soft text-danger-ink';
-                      } else {
-                        btnStyle = 'opacity-40 border-line bg-surface-2 text-ink-3';
-                      }
-                    }
-
-                    return (
-                      <button
-                        key={optIdx}
-                        role="radio"
-                        aria-checked={isSelected}
-                        disabled={challengeAnswered}
-                        onClick={() => handleChallengeAnswer(optIdx)}
-                        className={`w-full flex items-center justify-between rounded-xl border p-3.5 text-right text-sm font-semibold transition-all ${btnStyle}`}
-                      >
-                        <span>{opt}</span>
-                        {challengeAnswered && isCorrectOption && (
-                          <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
-                        )}
-                        {challengeAnswered && isSelected && !isCorrectOption && (
-                          <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {challengeAnswered && (
-                  <div
-                    className={`mt-4 rounded-2xl p-4 border text-sm leading-relaxed ${
-                      selectedChallengeOption === CHALLENGES[challengeIndex % CHALLENGES.length].ans
-                        ? 'border-success/30 bg-success-soft text-success-ink'
-                        : 'border-warning/30 bg-warning-soft text-warning-ink'
-                    }`}
-                  >
-                    <strong className="block font-bold mb-1">
-                      {selectedChallengeOption === CHALLENGES[challengeIndex % CHALLENGES.length].ans
-                        ? 'آفرین! کاملاً درست است:'
-                        : 'این بار نه؛ اما تحلیل منطقی را ببینید:'}
-                    </strong>
-                    {CHALLENGES[challengeIndex % CHALLENGES.length].why}
+              ) : (
+                <>
+                  <div className="flex items-center justify-between border-b border-line pb-3">
+                    <div>
+                      <span className="text-xs font-bold text-accent">
+                        {content.site.pageIntros.challenge.kicker}
+                      </span>
+                      <h2 className="text-xl font-bold text-ink mt-0.5">
+                        {content.site.pageIntros.challenge.title} ({CHALLENGES[challengeIndex % CHALLENGES.length]?.type || 'دام‌یاب'})
+                      </h2>
+                    </div>
+                    <div className="flex items-center gap-1.5 rounded-xl bg-accent-soft px-3 py-1.5 text-xs font-bold text-accent-ink">
+                      <Award className="h-4 w-4" />
+                      <span>{toPersianDigits(challengeCorrectCount)} پاسخ درست</span>
+                    </div>
                   </div>
-                )}
-              </div>
 
-              {/* Challenge summary card after final challenge */}
-              {challengeIndex === CHALLENGES.length - 1 && challengeAnswered && (
-                <div className="rounded-2xl border border-line bg-surface-2 p-5 text-center space-y-3">
-                  <h3 className="text-base font-bold text-ink">
-                    {toPersianDigits(challengeCorrectCount)} از {toPersianDigits(CHALLENGES.length)} چالش را درست پاسخ دادید
-                  </h3>
-                  <div className="flex justify-center gap-2">
-                    <button
-                      onClick={() => {
-                        setChallengeIndex(0);
-                        setChallengeAnswered(false);
-                        setSelectedChallengeOption(null);
-                      }}
-                      className="rounded-xl border border-line bg-surface px-4 py-2 text-xs font-bold text-ink hover:bg-surface-2"
-                    >
-                      مرور دوباره
-                    </button>
-                    <button
-                      onClick={() => handleNavigate('home')}
-                      className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
-                    >
-                      بازگشت به میز کار
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Digital Collectible Cards Progress */}
-              <div className="border-t border-line pt-4">
-                <span className="text-xs font-bold text-ink-2 block mb-2">
-                  کارت‌های دیجیتال شخصیت‌های باز شده:
-                </span>
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                  {Object.keys(PEOPLE).map((pKey) => {
-                    const isUnlocked = unlockedArchetypes.includes(pKey);
-                    return (
-                      <div
-                        key={pKey}
-                        className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold border transition-all ${
-                          isUnlocked
-                            ? 'border-primary/20 bg-primary-soft text-primary-ink shadow-sm'
-                            : 'border-dashed border-line-strong bg-surface-2 text-ink-3'
-                        }`}
-                      >
-                        <span>{isUnlocked ? '✓' : '🔒'}</span>
-                        <span>{PEOPLE[pKey].name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between border-t border-line pt-4">
-                <button
-                  onClick={() => handleNavigate('learning')}
-                  className="text-xs font-bold text-ink-2 hover:text-ink"
-                >
-                  بازگشت به مسیر
-                </button>
-
-                <div className="flex gap-2">
-                  {challengeAnswered && challengeIndex < CHALLENGES.length - 1 && (
-                    <button
-                      onClick={handleNextChallenge}
-                      className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-surface hover:opacity-90 shadow-sm"
-                    >
-                      <span>چالش بعدی</span>
-                      <ArrowLeft className="h-3.5 w-3.5" />
-                    </button>
+                  {/* Already Answered Notice */}
+                  {answeredChallenges.includes(String(challengeIndex)) && (
+                    <div className="inline-flex items-center gap-1.5 text-xs font-bold text-success bg-success-soft px-3 py-1 rounded-full">
+                      <span>✓ پاسخ داده شده</span>
+                    </div>
                   )}
 
-                  <button
-                    onClick={() => {
-                      markLearningDone('challenge');
-                      showToast('تبریک! تمام بخش‌های مسیر یادگیری را طی کردید.');
-                      handleNavigate('home');
-                    }}
-                    className="rounded-xl border border-line bg-surface px-3.5 py-2 text-xs font-bold text-ink hover:bg-surface-2 shadow-sm"
-                  >
-                    تکمیل و بازگشت به میز کار
-                  </button>
-                </div>
-              </div>
+                  <div>
+                    <p className="text-sm font-bold text-ink leading-relaxed">
+                      {CHALLENGES[challengeIndex % CHALLENGES.length]?.q}
+                    </p>
+
+                    <div role="radiogroup" aria-label="گزینه‌های پاسخ چالش" className="mt-5 space-y-2.5">
+                      {CHALLENGES[challengeIndex % CHALLENGES.length]?.opts.map((opt, optIdx) => {
+                        const isCorrectOption = optIdx === CHALLENGES[challengeIndex % CHALLENGES.length]?.ans;
+                        const isSelected = selectedChallengeOption === optIdx;
+
+                        let btnStyle = 'border-line bg-surface hover:bg-surface-2 text-ink';
+                        if (challengeAnswered) {
+                          if (isCorrectOption) {
+                            btnStyle = 'border-success bg-success-soft text-success-ink font-bold';
+                          } else if (isSelected) {
+                            btnStyle = 'border-danger bg-danger-soft text-danger-ink';
+                          } else {
+                            btnStyle = 'opacity-40 border-line bg-surface-2 text-ink-3';
+                          }
+                        }
+
+                        return (
+                          <button
+                            key={optIdx}
+                            role="radio"
+                            aria-checked={isSelected}
+                            disabled={challengeAnswered}
+                            onClick={() => handleChallengeAnswer(optIdx)}
+                            className={`w-full flex items-center justify-between rounded-xl border p-3.5 text-right text-sm font-semibold transition-all ${btnStyle}`}
+                          >
+                            <span>{opt}</span>
+                            {challengeAnswered && isCorrectOption && (
+                              <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
+                            )}
+                            {challengeAnswered && isSelected && !isCorrectOption && (
+                              <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {challengeAnswered && (
+                      <div
+                        className={`mt-4 rounded-2xl p-4 border text-sm leading-relaxed ${
+                          selectedChallengeOption === CHALLENGES[challengeIndex % CHALLENGES.length]?.ans
+                            ? 'border-success/30 bg-success-soft text-success-ink'
+                            : 'border-warning/30 bg-warning-soft text-warning-ink'
+                        }`}
+                      >
+                        <strong className="block font-bold mb-1">
+                          {selectedChallengeOption === CHALLENGES[challengeIndex % CHALLENGES.length]?.ans
+                            ? 'آفرین! کاملاً درست است:'
+                            : 'این بار نه؛ اما تحلیل منطقی را ببینید:'}
+                        </strong>
+                        {CHALLENGES[challengeIndex % CHALLENGES.length]?.why}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Challenge summary card after final challenge */}
+                  {challengeIndex === CHALLENGES.length - 1 && challengeAnswered && (
+                    <div className="rounded-2xl border border-line bg-surface-2 p-5 text-center space-y-3">
+                      <h3 className="text-base font-bold text-ink">
+                        {toPersianDigits(challengeCorrectCount)} از {toPersianDigits(CHALLENGES.length)} چالش را درست پاسخ دادید
+                      </h3>
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => {
+                            setChallengeIndex(0);
+                            setChallengeAnswered(false);
+                            setSelectedChallengeOption(null);
+                          }}
+                          className="rounded-xl border border-line bg-surface px-4 py-2 text-xs font-bold text-ink hover:bg-surface-2"
+                        >
+                          مرور دوباره
+                        </button>
+                        <button
+                          onClick={() => handleNavigate('home')}
+                          className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm"
+                        >
+                          بازگشت به میز کار
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Digital Collectible Cards Progress */}
+                  <div className="border-t border-line pt-4">
+                    <span className="text-xs font-bold text-ink-2 block mb-2">
+                      کارت‌های دیجیتال شخصیت‌های باز شده:
+                    </span>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                      {Object.keys(PEOPLE).map((pKey) => {
+                        const isUnlocked = unlockedArchetypes.includes(pKey);
+                        return (
+                          <div
+                            key={pKey}
+                            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold border transition-all ${
+                              isUnlocked
+                                ? 'border-primary/20 bg-primary-soft text-primary-ink shadow-sm'
+                                : 'border-dashed border-line-strong bg-surface-2 text-ink-3'
+                            }`}
+                          >
+                            <span>{isUnlocked ? '✓' : '🔒'}</span>
+                            <span>{PEOPLE[pKey]?.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-line pt-4">
+                    <button
+                      onClick={() => handleNavigate('learning')}
+                      className="text-xs font-bold text-ink-2 hover:text-ink"
+                    >
+                      بازگشت به مسیر
+                    </button>
+
+                    <div className="flex gap-2">
+                      {challengeAnswered && challengeIndex < CHALLENGES.length - 1 && (
+                        <button
+                          onClick={handleNextChallenge}
+                          className="flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-surface hover:opacity-90 shadow-sm"
+                        >
+                          <span>چالش بعدی</span>
+                          <ArrowLeft className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          markLearningDone('challenge');
+                          showToast('تبریک! تمام بخش‌های مسیر یادگیری را طی کردید.');
+                          handleNavigate('home');
+                        }}
+                        className="rounded-xl border border-line bg-surface px-3.5 py-2 text-xs font-bold text-ink hover:bg-surface-2 shadow-sm"
+                      >
+                        تکمیل و بازگشت به میز کار
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1743,62 +1844,68 @@ function DerangApp() {
             </div>
 
             <div className="space-y-3">
-              {BOOK_QA.map((item, idx) => {
-                const isOpen = openBookIndex === idx;
-                return (
-                  <div
-                    key={idx}
-                    className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition-all"
-                  >
-                    <button
-                      onClick={() => {
-                        playSoundEffect('tap', settings.sound, settings.fxVolume);
-                        setOpenBookIndex(isOpen ? null : idx);
-                      }}
-                      className="flex w-full items-center justify-between p-4.5 text-right hover:bg-surface-2 transition-colors"
-                      aria-expanded={isOpen}
+              {BOOK_QA.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line bg-surface p-8 text-center text-sm text-ink-3">
+                  هنوز محتوایی برای این بخش منتشر نشده است.
+                </div>
+              ) : (
+                BOOK_QA.map((item, idx) => {
+                  const isOpen = openBookIndex === idx;
+                  return (
+                    <div
+                      key={idx}
+                      className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm transition-all"
                     >
-                      <div className="flex items-start gap-3">
-                        <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary font-bold text-xs mt-0.5">
-                          {toPersianDigits(idx + 1)}
-                        </span>
-                        <div>
-                          <span className="text-[13px] font-semibold text-ink-3 block mb-0.5">
-                            {item.category}
+                      <button
+                        onClick={() => {
+                          playSoundEffect('tap', settings.sound, settings.fxVolume);
+                          setOpenBookIndex(isOpen ? null : idx);
+                        }}
+                        className="flex w-full items-center justify-between p-4.5 text-right hover:bg-surface-2 transition-colors"
+                        aria-expanded={isOpen}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary font-bold text-xs mt-0.5">
+                            {toPersianDigits(idx + 1)}
                           </span>
-                          <h4 className="text-sm font-bold text-ink">
-                            {item.q}
-                          </h4>
+                          <div>
+                            <span className="text-[13px] font-semibold text-ink-3 block mb-0.5">
+                              {item.category}
+                            </span>
+                            <h4 className="text-sm font-bold text-ink">
+                              {item.q}
+                            </h4>
+                          </div>
                         </div>
-                      </div>
-                      {isOpen ? (
-                        <ChevronUp className="h-5 w-5 text-ink-3 flex-shrink-0" />
-                      ) : (
-                        <ChevronDown className="h-5 w-5 text-ink-3 flex-shrink-0" />
+                        {isOpen ? (
+                          <ChevronUp className="h-5 w-5 text-ink-3 flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-ink-3 flex-shrink-0" />
+                        )}
+                      </button>
+
+                      {isOpen && (
+                        <div className="border-t border-line bg-surface-2 p-5 text-sm text-ink-2 space-y-3 leading-relaxed animate-fadeIn">
+                          <p className="font-normal">{item.a}</p>
+
+                          <div className="rounded-xl bg-warning-soft p-3.5 border border-warning/20">
+                            <span className="text-[13px] font-bold text-warning-ink block mb-0.5">
+                              تمرین ۶۰ ثانیه‌ای برای تصمیم شما:
+                            </span>
+                            <p className="text-sm text-warning-ink font-medium">
+                              {item.task}
+                            </p>
+                          </div>
+
+                          <span className="text-xs text-ink-3 block">
+                            ارجاع: {item.ref}
+                          </span>
+                        </div>
                       )}
-                    </button>
-
-                    {isOpen && (
-                      <div className="border-t border-line bg-surface-2 p-5 text-sm text-ink-2 space-y-3 leading-relaxed animate-fadeIn">
-                        <p className="font-normal">{item.a}</p>
-
-                        <div className="rounded-xl bg-warning-soft p-3.5 border border-warning/20">
-                          <span className="text-[13px] font-bold text-warning-ink block mb-0.5">
-                            تمرین ۶۰ ثانیه‌ای برای تصمیم شما:
-                          </span>
-                          <p className="text-sm text-warning-ink font-medium">
-                            {item.task}
-                          </p>
-                        </div>
-
-                        <span className="text-xs text-ink-3 block">
-                          ارجاع: {item.ref}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -1879,26 +1986,37 @@ function DerangApp() {
                 )}
 
                 {/* Video Module Section */}
-                {(libraryFilter === 'all' || libraryFilter === 'video') && videoMatches && (
-                  <div className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-[13px] font-bold text-warning">ویدئو</span>
-                        <h4 className="text-base font-bold text-ink mt-0.5">
-                          شاه سلطان حسین؛ هزینه تعلل در تصمیم‌گیری
-                        </h4>
-                        <p className="text-sm text-ink-2 mt-1">
-                          روایت طنزآمیز و درس‌آموز از پیامدهای ترس از اتخاذ تصمیمات سخت
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setActiveModal('video')}
-                        className="flex items-center gap-1.5 rounded-xl bg-warning px-4 py-2 text-xs font-bold text-surface hover:opacity-90 shadow-sm"
-                      >
-                        <Video className="h-4 w-4" />
-                        <span>تماشا</span>
-                      </button>
+                {(libraryFilter === 'all' || libraryFilter === 'video') && filteredVideos.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-bold text-ink-2">
+                      <Video className="h-4 w-4 text-warning" />
+                      <span>ویدئوهای تحلیلی ({toPersianDigits(filteredVideos.length)} مورد):</span>
                     </div>
+                    {filteredVideos.map((video) => (
+                      <div key={video.id} className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div>
+                            <span className="text-[13px] font-bold text-warning">{video.badge}</span>
+                            <h4 className="text-base font-bold text-ink mt-0.5">
+                              {video.title}
+                            </h4>
+                            <p className="text-sm text-ink-2 mt-1 leading-relaxed">
+                              {video.desc}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setActiveVideoId(video.id);
+                              setActiveModal('video');
+                            }}
+                            className="flex items-center gap-1.5 rounded-xl bg-warning px-4 py-2 text-xs font-bold text-surface hover:opacity-90 shadow-sm whitespace-nowrap flex-shrink-0"
+                          >
+                            <Video className="h-4 w-4" />
+                            <span>تماشا</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -2066,7 +2184,7 @@ function DerangApp() {
               <div className="space-y-3">
                 {decisions.map((d) => {
                   const answeredCount = getAnsweredCount(d);
-                  const percent = Math.round((answeredCount / QUESTIONS.length) * 100);
+                  const percent = QUESTIONS.length > 0 ? Math.round((answeredCount / QUESTIONS.length) * 100) : 0;
 
                   return (
                     <div
