@@ -18,8 +18,11 @@ const PUBLIC_CACHE = 'public, max-age=0, s-maxage=15, stale-while-revalidate=60'
 
 function pathSegments(request: Request): string[] {
   const url = new URL(request.url);
-  // vercel.json rewrites /api/<path> to /api?__path=<path>; fall back to the real path locally.
-  const raw = url.searchParams.get('__path') ?? url.pathname.replace(/^\/api\/?/, '');
+  // Vercel keeps the original /api/<path> in request.url after the vercel.json
+  // rewrite; the __path query parameter (which Vercel may pad with whitespace)
+  // is only a fallback for runtimes that report the rewritten URL.
+  const fromPath = url.pathname.replace(/^\/api\/?/, '');
+  const raw = fromPath && fromPath !== 'index' ? fromPath : (url.searchParams.get('__path') ?? '').trim();
   return raw
     .split('/')
     .filter(Boolean)
@@ -41,11 +44,7 @@ export async function handle(request: Request): Promise<Response> {
       return json(await readBundle(true), 200, PUBLIC_CACHE);
     }
 
-    if (seg[0] !== 'admin') {
-      // TEMP diagnostics for Vercel path handling
-      console.log('[api-debug]', JSON.stringify({ url: request.url, seg, headers: [...request.headers].filter(([k]) => !/cookie|authorization/i.test(k)) }));
-      throw notFound();
-    }
+    if (seg[0] !== 'admin') throw notFound();
     const route = seg.slice(1);
 
     if (route[0] === 'login' && route.length === 1) {
