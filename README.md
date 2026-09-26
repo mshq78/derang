@@ -56,14 +56,32 @@ VITE_API_BASE_URL=https://your-api-server.com
 
 ## قرارداد ارتباط با سرور (Backend Contract)
 
-> **توجه:** سرور پشتیبان (Backend) در این مخزن وجود ندارد و جداگانه توسعه داده می‌شود. این مخزن صرفاً کلاینت فرانت‌اند است.
+بک‌اند در همین مخزن است و روی Vercel Functions اجرا می‌شود؛ داده‌ها در Postgres (Neon) و فایل‌ها در Vercel Blob ذخیره می‌شوند.
 
-قرارداد اندپوینت‌ها (مطابق با پیاده‌سازی در `src/lib/api.ts`):
+- `api/index.ts`: تنها تابع سرور. `vercel.json` همه درخواست‌های `/api/...` را به آن می‌فرستد.
+- `server/router.ts`: مسیریابی اندپوینت‌ها.
+- `server/schema.ts`: ساخت خودکار جدول‌ها در اولین درخواست و پرکردن دیتابیس خالی با `src/data/defaultContent.ts`. هیچ مرحله دستی لازم نیست.
+- `server/content.ts`: خواندن و نوشتن محتوا. هر تغییر، `version` محتوا را عوض می‌کند تا کش کاربران به‌روز شود.
+- `server/validate.ts`: اعتبارسنجی همه ورودی‌ها (فیلدها، طول متن، نشانی‌های http/https، شناسه‌ها).
+- `server/auth.ts`: ورود مدیر، نشست ۱۲ ساعته (فقط هش توکن در دیتابیس ذخیره می‌شود) و قفل موقت پس از ۱۰ تلاش ناموفق در ۱۵ دقیقه.
+- `server/upload.ts`: صدور توکن کوتاه‌مدت بارگذاری. فایل مستقیم از مرورگر به Vercel Blob می‌رود (بدنه توابع Vercel به ۴٫۵ مگابایت محدود است). سقف حجم: تصویر ۵، صوت ۵۰ و ویدئو ۲۰۰ مگابایت.
+
+### متغیرهای محیطی سرور (در تنظیمات پروژه Vercel)
+
+| متغیر | توضیح |
+| --- | --- |
+| `DATABASE_URL` | اتصال Neon (یکپارچگی Neon در Vercel خودش تنظیم می‌کند) |
+| `BLOB_READ_WRITE_TOKEN` | توکن Vercel Blob برای بارگذاری فایل |
+| `ADMIN_USERNAME` | نام کاربری پنل مدیریت |
+| `ADMIN_PASSWORD` | رمز پنل مدیریت؛ برای تغییر رمز فقط همین متغیر را عوض کنید و دوباره Deploy کنید |
+
+قرارداد اندپوینت‌ها (مطابق با پیاده‌سازی در `src/lib/api.ts` و `server/router.ts`):
 
 ### اندپوینت‌های عمومی (Public)
 - **`GET /api/content`**
   - بدون نیاز به توکن احراز هویت
   - خروجی: `ContentBundle` (شامل موارد منتشرشده و مرتب‌شده)
+  - ۱۵ ثانیه در CDN کش می‌شود؛ تغییرات پنل حداکثر پس از چند ثانیه روی سایت دیده می‌شوند.
 
 ### اندپوینت‌های مدیریت (Admin)
 تمامی اندپوینت‌های مدیریت نیازمند هدر `Authorization: Bearer <token>` هستند (به جز لاگین):
@@ -92,9 +110,10 @@ VITE_API_BASE_URL=https://your-api-server.com
 - **`POST /api/admin/collections/:collection/reorder`**
   - بدنه درخواست: `{ "ids": ["id1", "id2", ...] }`
   - خروجی: `{ "items": [...] }`
-- **`POST /api/admin/upload`**
-  - چندبخشی (Multipart FormData): فیلد `file` + فیلد `kind` با مقادیر `'audio' | 'video' | 'image'`
-  - خروجی: وضعیت `201 Created` با `{ "url": "string", "contentType": "string", "size": number }`
+- **`POST /api/admin/blob-upload`**
+  - توسط `upload()` از `@vercel/blob/client` فراخوانی می‌شود و فقط توکن بارگذاری صادر می‌کند؛ مسیر فایل با نوع آن شروع می‌شود (`image/...`، `audio/...`، `video/...`).
+- **`GET /api/admin/export`**
+  - خروجی: `ContentBundle` کامل (پشتیبان)
 - **`POST /api/admin/import`**
   - بدنه درخواست: `ContentBundle`
   - خروجی: `{ "ok": true }`

@@ -443,9 +443,9 @@ export const adminReorderCollection = async (
 };
 
 /**
- * POST /api/admin/upload
- * Multipart: field "file" + field "kind" ('audio' | 'video' | 'image')
- * Uses XMLHttpRequest with 10s timeout & progress reporting.
+ * Upload a media file to Vercel Blob.
+ * POST /api/admin/blob-upload issues the upload token (admin only);
+ * the file itself goes directly from the browser to Blob storage.
  */
 export const adminUploadMedia = (
   file: File,
@@ -482,71 +482,41 @@ export const adminUploadMedia = (
     });
   }
 
-  return new Promise((resolve, reject) => {
-    const baseUrl = getBaseUrl();
-    const url = `${baseUrl}/api/admin/upload`;
-    const xhr = new XMLHttpRequest();
+  const safeName =
+    file.name
+      .normalize('NFKD')
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(-80) || 'file';
+  const token = getAdminToken();
 
-    xhr.open('POST', url, true);
-    xhr.timeout = REQUEST_TIMEOUT_MS;
-
-    const token = getAdminToken();
-    if (token) {
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-    }
-
-    if (xhr.upload && onProgress) {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const percent = Math.round((e.loaded / e.total) * 100);
-          onProgress(percent);
-        }
-      };
-    }
-
-    xhr.onload = () => {
-      if (xhr.status === 401) {
+  // The browser uploads straight to Vercel Blob; /api/admin/blob-upload only
+  // checks the admin session and issues a short-lived upload token.
+  // Loaded on demand so regular visitors never download the upload client.
+  return import('@vercel/blob/client')
+    .then(({ upload }) =>
+      upload(`${kind}/${safeName}`, file, {
+        access: 'public',
+        handleUploadUrl: `${getBaseUrl()}/api/admin/blob-upload`,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        contentType: file.type || undefined,
+        multipart: file.size > 20 * 1024 * 1024,
+        onUploadProgress: ({ percentage }) => onProgress?.(Math.round(percentage)),
+      })
+    )
+    .then((blob) => ({
+      url: blob.url,
+      contentType: blob.contentType || file.type,
+      size: file.size,
+    }))
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : '';
+      if (/401|unauthorized|منقضی/i.test(message)) {
         emitSessionExpired();
-        reject(new Error('نشست شما منقضی شده است؛ دوباره وارد شوید.'));
-        return;
+        throw new Error('نشست شما منقضی شده است؛ دوباره وارد شوید.');
       }
-
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          resolve(data);
-        } catch {
-          reject(new Error('پاسخ سرور در بارگذاری فایل نامعتبر است.'));
-        }
-      } else {
-        let errMsg = `خطا در بارگذاری فایل (${xhr.status})`;
-        try {
-          const errData = JSON.parse(xhr.responseText);
-          if (errData?.error?.message) {
-            errMsg = errData.error.message;
-          } else if (errData?.message) {
-            errMsg = errData.message;
-          }
-        } catch {
-          // ignore
-        }
-        reject(new Error(errMsg));
-      }
-    };
-
-    xhr.onerror = () => {
-      reject(new Error('خطای شبکه در بارگذاری فایل.'));
-    };
-
-    xhr.ontimeout = () => {
-      reject(new Error('زمان بارگذاری فایل به پایان رسید (تایم‌اوت ۱۰ ثانیه).'));
-    };
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('kind', kind);
-    xhr.send(formData);
-  });
+      throw new Error(message ? `بارگذاری فایل انجام نشد: ${message}` : 'بارگذاری فایل انجام نشد.');
+    });
 };
 
 /**

@@ -68,6 +68,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
   const [isOnline, setIsOnline] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(() => !!getAdminToken());
   const [isSandboxMode, setIsSandboxMode] = useState<boolean>(false);
+  // Editing is blocked until real data has loaded, so a failed or pending load
+  // can never overwrite the database with the bundled defaults.
+  const [hasLoaded, setHasLoaded] = useState<boolean>(false);
 
   // Login form state
   const [username, setUsername] = useState('');
@@ -122,6 +125,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
       const bundle = await adminGetContent(sandbox);
       setContent(bundle);
       setIsOnline(!sandbox);
+      setHasLoaded(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'خطا در بارگذاری محتوای مدیریت.';
       showError(msg);
@@ -134,6 +138,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
   useEffect(() => {
     const handleExpired = () => {
       setIsAdmin(false);
+      setHasLoaded(false);
       setIsSandboxMode(false);
       setLoginError('نشست شما منقضی شده است؛ دوباره وارد شوید.');
     };
@@ -191,6 +196,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
       }
     }
     setIsAdmin(false);
+    setHasLoaded(false);
     setIsSandboxMode(false);
     showToast('با موفقیت خارج شدید.');
   };
@@ -664,16 +670,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
         })}
       </div>
 
+      {!hasLoaded && (
+        <div className="rounded-3xl border border-line bg-surface p-8 text-center text-sm text-ink-2 shadow-sm">
+          {isLoading ? (
+            'در حال دریافت محتوا از سرور...'
+          ) : (
+            <div className="space-y-3">
+              <p>محتوا از سرور دریافت نشد؛ تا وقتی داده‌ها بارگذاری نشوند ویرایش ممکن نیست.</p>
+              <button
+                onClick={() => loadAdminData()}
+                className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary-hover"
+              >
+                تلاش دوباره
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* TAB CONTENT: Site Settings */}
-      {activeTab === 'site' && (
+      {hasLoaded && activeTab === 'site' && (
         <SiteSettingsEditor
+          key={content.version}
           settings={content.site}
           onSave={handleSaveSiteSettings}
         />
       )}
 
       {/* TAB CONTENT: Collections */}
-      {activeTab !== 'site' && (
+      {hasLoaded && activeTab !== 'site' && (
         <div className="space-y-3">
           {/* Search bar for items */}
           <div className="relative">

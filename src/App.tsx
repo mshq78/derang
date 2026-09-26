@@ -2986,17 +2986,17 @@ function DerangApp() {
         />
       )}
 
-      {activeModal === 'video' && (
+      {activeModal === 'video' && activeVideo && (
         <VideoPlayerModal
           onClose={() => setActiveModal('none')}
-          title={content.videos[0]?.title}
-          badge={content.videos[0]?.badge}
-          description={content.videos[0]?.desc}
-          videoUrl={content.videos[0]?.videoUrl}
-          posterUrl={content.videos[0]?.posterUrl}
-          quote={content.videos[0]?.quote}
-          reflectionQuestion={content.videos[0]?.reflectionQuestion}
-          whyImportant={content.videos[0]?.whyImportant}
+          title={activeVideo.title}
+          badge={activeVideo.badge}
+          description={activeVideo.desc}
+          videoUrl={activeVideo.videoUrl}
+          posterUrl={activeVideo.posterUrl}
+          quote={activeVideo.quote}
+          reflectionQuestion={activeVideo.reflectionQuestion}
+          whyImportant={activeVideo.whyImportant}
         />
       )}
 

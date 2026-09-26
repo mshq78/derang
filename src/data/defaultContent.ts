@@ -1,4 +1,4 @@
-import { ContentBundle } from '../types/content';
+import type { ContentBundle } from '../types/content';
 
 export const DEFAULT_CONTENT: ContentBundle = {
   version: '1.0.0',
