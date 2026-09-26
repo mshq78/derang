@@ -41,7 +41,11 @@ export async function handle(request: Request): Promise<Response> {
       return json(await readBundle(true), 200, PUBLIC_CACHE);
     }
 
-    if (seg[0] !== 'admin') throw notFound();
+    if (seg[0] !== 'admin') {
+      // TEMP diagnostics for Vercel path handling
+      console.log('[api-debug]', JSON.stringify({ url: request.url, seg, headers: [...request.headers].filter(([k]) => !/cookie|authorization/i.test(k)) }));
+      throw notFound();
+    }
     const route = seg.slice(1);
 
     if (route[0] === 'login' && route.length === 1) {
