@@ -121,10 +121,14 @@ export function isValidId(id: unknown): id is string {
   return typeof id === 'string' && ID_RE.test(id);
 }
 
-/** Accepts an empty string or an absolute http(s) URL. Blocks javascript: and data: URLs. */
+/**
+ * Accepts an empty string, a same-site path such as /media/audio/x.m4a, or an
+ * absolute http(s) URL. Blocks javascript:, data: and protocol-relative (//) URLs.
+ */
 export function isSafeUrl(value: string): boolean {
   if (value === '') return true;
   if (value.length > 2000) return false;
+  if (value.startsWith('/')) return /^\/(?!\/)[A-Za-z0-9._~%\/-]*$/.test(value);
   try {
     const u = new URL(value);
     return u.protocol === 'https:' || u.protocol === 'http:';
