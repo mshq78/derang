@@ -14,8 +14,7 @@ export type Screen =
   | 'stories'
   | 'challenge'
   | 'book'
-  | 'farewell'
-  | 'admin';
+  | 'farewell';
 
 export type AnswerValue = 'yes' | 'no' | 'unknown';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { HelpCircle, Settings, LogOut, ShieldCheck } from 'lucide-react';
+import { HelpCircle, Settings, LogOut } from 'lucide-react';
 import { Screen } from '../types';
 
 interface TopBarProps {
@@ -8,7 +8,6 @@ interface TopBarProps {
   onOpenHelp: () => void;
   onOpenSettings: () => void;
   onExit: () => void;
-  onOpenAdmin?: () => void;
   brandName?: string;
   orgName?: string;
   tagline?: string;
@@ -31,7 +30,6 @@ const SCREEN_TITLES: Record<string, string> = {
   challenge: 'چالش کشف',
   book: 'پرسش‌های کتاب Tune In',
   farewell: 'بدرود',
-  admin: 'مدیریت محتوا',
 };
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -40,7 +38,6 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenHelp,
   onOpenSettings,
   onExit,
-  onOpenAdmin,
   brandName = 'دِرانْـگ',
   orgName = 'پردیس نوآوری گِرا',
   tagline = 'سامانه تصمیم‌گیری هوشیار',
@@ -78,17 +75,6 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Zone 3: Primary Actions */}
         <div className="flex items-center gap-1.5">
-          {onOpenAdmin && currentScreen !== 'admin' && (
-            <button
-              onClick={onOpenAdmin}
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-ink-2 hover:bg-surface-2 hover:text-primary transition-colors"
-              aria-label="پنل مدیریت محتوا"
-              title="پنل مدیریت محتوا"
-            >
-              <ShieldCheck className="h-5 w-5" />
-            </button>
-          )}
-
           <button
             onClick={onOpenHelp}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-ink-2 hover:bg-surface-2 hover:text-ink transition-colors"

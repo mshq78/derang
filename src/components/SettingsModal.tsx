@@ -12,7 +12,6 @@ import {
   Eye,
   Activity,
   Check,
-  ShieldCheck,
 } from 'lucide-react';
 import { AppSettings, UserProfile } from '../types';
 import { Modal } from './Modal';
@@ -27,7 +26,6 @@ interface SettingsModalProps {
   onBackup: () => void;
   onRestore: (file: File) => void;
   onClearData: () => void;
-  onNavigateToAdmin?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -40,7 +38,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onBackup,
   onRestore,
   onClearData,
-  onNavigateToAdmin,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -419,30 +416,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             />
           </div>
         </div>
-
-        {/* Admin Panel Link */}
-        {onNavigateToAdmin && (
-          <div className="rounded-2xl border border-line bg-surface-2 p-3.5 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-bold text-ink block">
-                مدیریت محتوای سامانه
-              </span>
-              <span className="text-[12px] text-ink-3">
-                ویرایش ایستگاه‌ها، سوالات، متون و تنظیمات برند
-              </span>
-            </div>
-            <button
-              onClick={() => {
-                onClose();
-                onNavigateToAdmin();
-              }}
-              className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-bold text-surface hover:bg-primary-hover shadow-sm transition-colors"
-            >
-              <ShieldCheck className="h-3.5 w-3.5" />
-              <span>پنل مدیریت</span>
-            </button>
-          </div>
-        )}
 
         {/* Danger zone: Reset */}
         <div className="flex items-center justify-between pt-1">

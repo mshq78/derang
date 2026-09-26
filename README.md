@@ -35,77 +35,69 @@ npm run build
 
 ## متغیرهای محیطی (Environment Variables)
 
-در فایل `.env` یا متغیرهای محیطی سیستم، می‌توانید آدرس سرور پشتیبان را مشخص نمایید:
+در فایل `.env` یا متغیرهای محیطی سیستم، می‌توانید آدرس پایه سرور را مشخص نمایید:
 
 ```env
 VITE_API_BASE_URL=https://your-api-server.com
 ```
 
-*نکته: در صورتی که `VITE_API_BASE_URL` خالی بماند، برنامه به‌صورت خودکار و بدون خطا روی داده‌های محلی و پیش‌فرض کارخانه (Offline-first / Static Fallback) اجرا می‌شود.*
+*نکته مهم:* در محیط تولید (Production)، خالی بودن `VITE_API_BASE_URL` به معنای فراخوانی نسبی مسیرهای `/api/...` روی همان دامنه اصلی سایت است. در صورت عدم دسترسی به شبکه، اپلیکیشن عمومی از حافظه کش محلی یا داده‌های پیش‌فرض بارگذاری می‌شود.
 
 ---
 
 ## پنل مدیریت محتوا (`/admin`)
 
-- برای ورود به پنل مدیریت، روی آیکون سپر در نوار بالای برنامه کلیک کنید یا مستقیماً به زبانه مدیریت بروید.
-- رمز عبور پیش‌فرض در حالت پیش‌نمایش: `admin`
-- **ایزولاسیون حالت پیش‌نمایش:** در محیط توسعه و بدون اتصال به سرور زنده، تغییرات ذخیره‌شده در پنل ادمین تنها در محیط Sandbox مرورگر شما می‌مانند و به هیچ‌وجه داده‌های عمومی کش‌شده یا پیش‌فرض برنامه را آلوده نمی‌کنند.
+- دسترسی به پنل مدیریت صرفاً از طریق آدرس مستقیم `/admin` امکان‌پذیر است.
+- در محیط توسعه (`DEV`)، دکمه «حالت پیش‌نمایش» امکان ورود به محیط Sandbox بدون رمز عبور را فراهم می‌کند.
+- در محیط تولید (`Production`)، ورود به پنل صرفاً با احراز هویت از طریق `POST /api/admin/login` انجام می‌پذیرد و در صورت بروز خطا در ذخیره‌سازی، پیام خطا نمایش داده شده و تغییرات فیک در کلاینت اعمال نمی‌شوند.
+- در زمان لود بودن صفحه پنل مدیریت، تگ `<meta name="robots" content="noindex,nofollow">` در هدر سند اعمال می‌شود.
 
 ---
 
 ## قرارداد ارتباط با سرور (Backend Contract)
 
-> **توجه مهم:** سرور پشتیبان (Backend) در این مخزن پیاده‌سازی نشده است. این نرم‌افزار به صورت یک کلاینت کامل و مستقل طراحی شده که می‌تواند مستقیماً به یک REST API متصل گردد.
+> **توجه:** سرور پشتیبان (Backend) در این مخزن وجود ندارد و جداگانه توسعه داده می‌شود. این مخزن صرفاً کلاینت فرانت‌اند است.
 
 قرارداد اندپوینت‌ها (مطابق با پیاده‌سازی در `src/lib/api.ts`):
 
-### ۱. احراز هویت مدیریت
-- **`POST /api/admin/login`**
-  - بدنه درخواست: `{ "password": "string" }`
-  - پاسخ: `{ "token": "string" }`
-
-### ۲. دریافت بسته کامل محتوا (عمومی)
+### اندپوینت‌های عمومی (Public)
 - **`GET /api/content`**
-  - بدون نیاز به توکن
-  - پاسخ: شیء کامل `ContentBundle` شامل تنظیمات سایت، ایستگاه‌ها، سوالات، ابزارها، شخصیت‌ها، داستان‌ها، چالش‌ها و راهنماها.
+  - بدون نیاز به توکن احراز هویت
+  - خروجی: `ContentBundle` (شامل موارد منتشرشده و مرتب‌شده)
 
-### ۳. به‌روزرسانی تنظیمات عمومی سایت
-- **`PUT /api/content/site`**
-  - هدرها: `Authorization: Bearer <token>`
-  - بدنه درخواست: `Partial<SiteSettings>`
-  - پاسخ: شیء به‌روز شده `SiteSettings`
+### اندپوینت‌های مدیریت (Admin)
+تمامی اندپوینت‌های مدیریت نیازمند هدر `Authorization: Bearer <token>` هستند (به جز لاگین):
 
-### ۴. افزودن مورد جدید به مجموعه‌ها
-- **`POST /api/content/:collection`**
+- **`POST /api/admin/login`**
+  - بدنه درخواست: `{ "username": "string", "password": "string" }`
+  - خروجی: `{ "token": "string", "expiresAt": "string", "admin": { "username": "string" } }`
+- **`GET /api/admin/me`**
+  - خروجی: `{ "admin": { "username": "string" } }`
+- **`POST /api/admin/logout`**
+  - خروجی: وضعیت `204 No Content`
+- **`GET /api/admin/content`**
+  - خروجی: `ContentBundle` شامل تمام موارد (حتی پیش‌نویس و منتشرنشده)
+- **`PUT /api/admin/site`**
+  - بدنه درخواست: `SiteSettings` (شیء کامل تنظیمات)
+  - خروجی: `SiteSettings`
+- **`POST /api/admin/collections/:collection`**
   - نام مجموعه‌ها: `stations`, `questions`, `perimeters`, `skills`, `sonic`, `people`, `audioStories`, `videos`, `bookQA`, `challenges`, `help`, `tour`, `learningSteps`
-  - هدرها: `Authorization: Bearer <token>`
-  - بدنه درخواست: اطلاعات مورد بدون `id` و `sortOrder`
-  - پاسخ: شیء ایجاد شده
-
-### ۵. ویرایش یک مورد در مجموعه
-- **`PUT /api/content/:collection/:id`**
-  - هدرها: `Authorization: Bearer <token>`
-  - بدنه درخواست: فیلدهای تغییریافته
-  - پاسخ: شیء به‌روز شده
-
-### ۶. حذف یک مورد از مجموعه
-- **`DELETE /api/content/:collection/:id`**
-  - هدرها: `Authorization: Bearer <token>`
-  - پاسخ: `{ "success": true }`
-
-### ۷. تغییر ترتیب موارد
-- **`PUT /api/content/:collection/reorder`**
-  - هدرها: `Authorization: Bearer <token>`
-  - بدنه درخواست: `{ "ids": ["id1", "id2", "id3", ...] }`
-  - پاسخ: `{ "success": true }`
-
-### ۸. بازنشانی تمام محتوا به حالت کارخانه
-- **`POST /api/content/reset`**
-  - هدرها: `Authorization: Bearer <token>`
-  - پاسخ: شیء کامل `ContentBundle` پیش‌فرض
-
-### ۹. بارگذاری فایل رسانه
+  - بدنه درخواست: اطلاعات مورد جدید (فیلد `id` اختیاری)
+  - خروجی: وضعیت `201 Created` با شیء مورد ایجادشده
+- **`PUT /api/admin/collections/:collection/:id`**
+  - بدنه درخواست: شیء کامل مورد به‌روزرسانی‌شده
+  - خروجی: شیء به‌روز شده
+- **`DELETE /api/admin/collections/:collection/:id`**
+  - خروجی: وضعیت `204 No Content`
+- **`POST /api/admin/collections/:collection/reorder`**
+  - بدنه درخواست: `{ "ids": ["id1", "id2", ...] }`
+  - خروجی: `{ "items": [...] }`
 - **`POST /api/admin/upload`**
-  - هدرها: `Authorization: Bearer <token>`
-  - بدنه درخواست: `FormData` حاوی فیلد `file`
-  - پاسخ: `{ "url": "string", "filename": "string" }`
+  - چندبخشی (Multipart FormData): فیلد `file` + فیلد `kind` با مقادیر `'audio' | 'video' | 'image'`
+  - خروجی: وضعیت `201 Created` با `{ "url": "string", "contentType": "string", "size": number }`
+- **`POST /api/admin/import`**
+  - بدنه درخواست: `ContentBundle`
+  - خروجی: `{ "ok": true }`
+
+فرمت بازگشت خطای سرور: `{ "error": { "code": "string", "message": "string" } }` که متن `message` مستقیماً به کاربر مدیر نمایش داده می‌شود.
+

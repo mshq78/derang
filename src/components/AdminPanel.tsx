@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ShieldCheck,
   Lock,
+  User,
   Eye,
   EyeOff,
   LogOut,
@@ -12,7 +13,6 @@ import {
   ArrowUp,
   ArrowDown,
   Search,
-  RotateCcw,
   Download,
   Upload,
   CheckCircle2,
@@ -30,8 +30,28 @@ import {
   Award,
   Zap,
 } from 'lucide-react';
-import { useContent } from '../context/ContentContext';
-import { CollectionName, SiteSettings, CollectionItem, Station } from '../types/content';
+import {
+  ContentBundle,
+  SiteSettings,
+  CollectionName,
+  CollectionItem,
+  CollectionItemMap,
+  Station,
+} from '../types/content';
+import { DEFAULT_CONTENT } from '../data/defaultContent';
+import {
+  adminLogin,
+  adminLogout,
+  adminGetContent,
+  adminUpdateSite,
+  adminAddItem,
+  adminUpdateItem,
+  adminDeleteItem,
+  adminReorderCollection,
+  adminUploadMedia,
+  adminImportContent,
+  getAdminToken,
+} from '../lib/api';
 import { toPersianDigits } from '../utils/helpers';
 import { Modal } from './Modal';
 
@@ -40,26 +60,17 @@ interface AdminPanelProps {
 }
 
 type AdminTab = 'site' | CollectionName;
+type FormRecord = Record<string, string | number | boolean | string[] | undefined>;
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
-  const {
-    content,
-    isLoading,
-    isOnline,
-    isAdmin,
-    loginAdmin,
-    logoutAdmin,
-    updateSite,
-    addItem,
-    updateItem,
-    deleteItem,
-    reorderCollection,
-    resetToDefault,
-    exportContentJson,
-    importContentJson,
-  } = useContent();
+  const [content, setContent] = useState<ContentBundle>(DEFAULT_CONTENT);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isOnline, setIsOnline] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => !!getAdminToken());
+  const [isSandboxMode, setIsSandboxMode] = useState<boolean>(false);
 
   // Login form state
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -75,44 +86,132 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
     data: CollectionItem | null;
     isNew: boolean;
   } | null>(null);
+
   const [deleteConfirm, setDeleteConfirm] = useState<{
     collection: CollectionName;
     id: string;
     title: string;
   } | null>(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  // Toast feedback
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [pendingImportBundle, setPendingImportBundle] = useState<ContentBundle | null>(null);
+  const [importConfirmText, setImportConfirmText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  // Feedback notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const showError = (msg: string) => {
+    setErrorMessage(msg);
+    setTimeout(() => setErrorMessage(null), 6000);
+  };
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Load admin content from /api/admin/content
+  const loadAdminData = useCallback(async (sandbox = isSandboxMode) => {
+    setIsLoading(true);
+    try {
+      const bundle = await adminGetContent(sandbox);
+      setContent(bundle);
+      setIsOnline(!sandbox);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در بارگذاری محتوای مدیریت.';
+      showError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isSandboxMode]);
+
+  // Listen for session expiration events
+  useEffect(() => {
+    const handleExpired = () => {
+      setIsAdmin(false);
+      setIsSandboxMode(false);
+      setLoginError('نشست شما منقضی شده است؛ دوباره وارد شوید.');
+    };
+    window.addEventListener('derang:session-expired', handleExpired);
+    return () => window.removeEventListener('derang:session-expired', handleExpired);
+  }, []);
+
+  // Load content when logged in
+  useEffect(() => {
+    if (isAdmin) {
+      loadAdminData();
+    }
+  }, [isAdmin, loadAdminData]);
+
   // Handle Login
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password.trim()) {
-      setLoginError('لطفاً رمز عبور را وارد کنید.');
+    if (!username.trim() || !password.trim()) {
+      setLoginError('لطفاً نام کاربری و رمز عبور را وارد کنید.');
       return;
     }
     setIsLoggingIn(true);
     setLoginError(null);
     try {
-      const res = await loginAdmin(password.trim());
-      if (!res.success) {
-        setLoginError(res.error || 'رمز عبور مدیریت نادرست است.');
-      }
-    } catch {
-      setLoginError('خطا در احراز هویت.');
+      await adminLogin({
+        username: username.trim(),
+        password: password.trim(),
+      });
+      setIsSandboxMode(false);
+      setIsAdmin(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'نام کاربری یا رمز عبور اشتباه است.';
+      setLoginError(msg);
     } finally {
       setIsLoggingIn(false);
     }
   };
 
-  // Reordering helpers
+  // Enter dev sandbox mode (DEV only)
+  const handleEnterSandbox = () => {
+    if (!import.meta.env.DEV) return;
+    setIsSandboxMode(true);
+    setIsAdmin(true);
+    setLoginError(null);
+    showToast('حالت پیش‌نمایش (Dev Sandbox) فعال شد.');
+  };
+
+  // Handle Logout
+  const handleLogout = async () => {
+    if (!isSandboxMode) {
+      try {
+        await adminLogout();
+      } catch {
+        // ignore
+      }
+    }
+    setIsAdmin(false);
+    setIsSandboxMode(false);
+    showToast('با موفقیت خارج شدید.');
+  };
+
+  // Update Site Settings
+  const handleSaveSiteSettings = async (newSettings: SiteSettings) => {
+    try {
+      const saved = await adminUpdateSite(newSettings, isSandboxMode);
+      setContent((prev) => ({
+        ...prev,
+        site: saved,
+        updatedAt: new Date().toISOString(),
+      }));
+      showToast('تنظیمات سامانه با موفقیت ذخیره شد.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای ناشناخته';
+      showError(`ذخیره نشد: ${msg}`);
+    }
+  };
+
+  // Reordering helper
   const handleMove = async (collection: CollectionName, index: number, direction: 'up' | 'down') => {
     const list = [...(content[collection] as CollectionItem[])];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -123,23 +222,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
     list[targetIndex] = temp;
 
     const orderedIds = list.map((item) => item.id);
-    const success = await reorderCollection(collection, orderedIds);
-    if (success) {
+    try {
+      const res = await adminReorderCollection(collection, orderedIds, isSandboxMode);
+      setContent((prev) => ({
+        ...prev,
+        [collection]: res.items || list,
+        updatedAt: new Date().toISOString(),
+      }));
       showToast('ترتیب موارد به‌روزرسانی شد.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای ناشناخته';
+      showError(`ذخیره نشد: ${msg}`);
     }
   };
 
   // Toggle Publish helper
   const handleTogglePublish = async (collection: CollectionName, item: CollectionItem) => {
-    const success = await updateItem(collection, item.id, {
-      isPublished: !item.isPublished,
-    } as Partial<CollectionItem>);
-    if (success) {
+    const updated = { ...item, isPublished: !item.isPublished };
+    try {
+      const saved = await adminUpdateItem(collection, item.id, updated, isSandboxMode);
+      setContent((prev) => ({
+        ...prev,
+        [collection]: (prev[collection] as CollectionItem[]).map((x) =>
+          x.id === item.id ? saved : x
+        ),
+        updatedAt: new Date().toISOString(),
+      }));
       showToast(
-        !item.isPublished
-          ? 'وضعیت به «منتشر شده» تغییر یافت.'
-          : 'وضعیت به «پیش‌نویس» تغییر یافت.'
+        updated.isPublished ? 'مورد با موفقیت منتشر شد.' : 'مورد به حالت پیش‌نویس درآمد.'
       );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای ناشناخته';
+      showError(`ذخیره نشد: ${msg}`);
     }
   };
 
@@ -147,65 +261,156 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
   const handleConfirmDelete = async () => {
     if (!deleteConfirm) return;
     const { collection, id } = deleteConfirm;
-    const success = await deleteItem(collection, id);
-    if (success) {
+    try {
+      await adminDeleteItem(collection, id, isSandboxMode);
+      setContent((prev) => ({
+        ...prev,
+        [collection]: (prev[collection] as CollectionItem[]).filter((x) => x.id !== id),
+        updatedAt: new Date().toISOString(),
+      }));
       showToast('مورد با موفقیت حذف شد.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای ناشناخته';
+      showError(`ذخیره نشد: ${msg}`);
+    } finally {
+      setDeleteConfirm(null);
     }
-    setDeleteConfirm(null);
   };
 
-  // Reset to default
-  const handleConfirmReset = async () => {
-    const success = await resetToDefault();
-    if (success) {
-      showToast('محتوای سامانه به نسخه پیش‌فرض بازنشانی شد.');
-    }
-    setShowResetConfirm(false);
+  // Export JSON
+  const handleExportJson = () => {
+    const dataStr =
+      'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(content, null, 2));
+    const a = document.createElement('a');
+    a.setAttribute('href', dataStr);
+    a.setAttribute(
+      'download',
+      `derang-content-${new Date().toISOString().split('T')[0]}.json`
+    );
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
-  // Import JSON handler
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle File Pick for Import
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    try {
-      const text = await file.text();
-      const res = await importContentJson(text);
-      showToast(res.message);
-    } catch {
-      showToast('خطا در خواندن فایل بارگذاری‌شده.');
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+
+        // Validate top-level keys
+        const requiredKeys = [
+          'version',
+          'updatedAt',
+          'site',
+          'stations',
+          'questions',
+          'perimeters',
+          'skills',
+          'sonic',
+          'people',
+          'audioStories',
+          'videos',
+          'bookQA',
+          'challenges',
+          'help',
+          'tour',
+          'learningSteps',
+        ];
+
+        for (const k of requiredKeys) {
+          if (!(k in parsed)) {
+            showError(`کلید الزامی "${k}" در فایل پشتیبان یافت نشد.`);
+            return;
+          }
+        }
+
+        const collections: CollectionName[] = [
+          'stations',
+          'questions',
+          'perimeters',
+          'skills',
+          'sonic',
+          'people',
+          'audioStories',
+          'videos',
+          'bookQA',
+          'challenges',
+          'help',
+          'tour',
+          'learningSteps',
+        ];
+
+        for (const col of collections) {
+          if (!Array.isArray(parsed[col])) {
+            showError(`مجموعه "${col}" در فایل پشتیبان معتبر نیست (باید آرایه باشد).`);
+            return;
+          }
+        }
+
+        setPendingImportBundle(parsed as ContentBundle);
+        setImportConfirmText('');
+        setImportError(null);
+        setShowImportModal(true);
+      } catch {
+        showError('فایل انتخاب‌شده یک JSON معتبر نیست.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  // Execute Import
+  const handleConfirmImport = async () => {
+    if (!pendingImportBundle) return;
+    if (importConfirmText.trim() !== 'تایید' && importConfirmText.trim() !== 'تأیید') {
+      setImportError('لطفاً عبارت «تایید» را دقیقاً وارد کنید.');
+      return;
     }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+
+    setIsImporting(true);
+    setImportError(null);
+    try {
+      await adminImportContent(pendingImportBundle, isSandboxMode);
+      setContent(pendingImportBundle);
+      setShowImportModal(false);
+      setPendingImportBundle(null);
+      showToast('محتوای سامانه با موفقیت بازیابی شد.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطای سرور در بارگذاری محتوا.';
+      setImportError(`ذخیره نشد: ${msg}`);
+    } finally {
+      setIsImporting(false);
     }
   };
 
-  // Tabs configuration
-  const tabs: Array<{
-    id: AdminTab;
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-    count?: number;
-  }> = [
-    { id: 'site', label: 'تنظیمات عمومی', icon: Globe },
-    { id: 'stations', label: 'ایستگاه‌ها', icon: Compass, count: content.stations.length },
-    { id: 'questions', label: 'پرسش‌های چک‌لیست', icon: CheckSquare, count: content.questions.length },
-    { id: 'perimeters', label: 'تله‌های PERIMETERS', icon: AlertTriangle, count: content.perimeters.length },
-    { id: 'skills', label: 'شایستگی‌ها', icon: Award, count: content.skills.length },
+  // Navigation tabs configuration
+  const tabs: { id: AdminTab; label: string; icon: React.FC<{ className?: string }>; count?: number }[] = [
+    { id: 'site', label: 'تنظیمات عمومی سایت', icon: Globe },
+    { id: 'stations', label: 'ایستگاه‌های تصمیم', icon: CheckSquare, count: content.stations.length },
+    { id: 'questions', label: 'پرسش‌های ارزیابی', icon: HelpCircle, count: content.questions.length },
+    { id: 'perimeters', label: 'دام‌های PERIMETERS', icon: Layers, count: content.perimeters.length },
+    { id: 'skills', label: 'شایستگی‌های رهبری', icon: Sparkles, count: content.skills.length },
     { id: 'sonic', label: 'ابزارهای SONIC', icon: Zap, count: content.sonic.length },
-    { id: 'people', label: 'کهن‌الگوها و چهره‌ها', icon: Users, count: content.people.length },
-    { id: 'audioStories', label: 'داستان‌های صوتی', icon: Volume2, count: content.audioStories.length },
-    { id: 'videos', label: 'ویدیوها', icon: Video, count: content.videos.length },
-    { id: 'bookQA', label: 'بانک پرسش کتاب', icon: BookOpen, count: content.bookQA.length },
-    { id: 'challenges', label: 'چالش‌های تحلیلی', icon: Sparkles, count: content.challenges.length },
+    { id: 'people', label: 'الگوهای شخصیتی', icon: Users, count: content.people.length },
+    { id: 'audioStories', label: 'روایت‌های صوتی', icon: Volume2, count: content.audioStories.length },
+    { id: 'videos', label: 'ویدیوهای تحلیلی', icon: Video, count: content.videos.length },
+    { id: 'bookQA', label: 'پرسش‌های کتاب', icon: BookOpen, count: content.bookQA.length },
+    { id: 'challenges', label: 'چالش‌ها و سناریوها', icon: Award, count: content.challenges.length },
     { id: 'help', label: 'پیام‌های راهنما', icon: HelpCircle, count: content.help.length },
-    { id: 'tour', label: 'اسلایدهای تور', icon: Layers, count: content.tour.length },
+    { id: 'tour', label: 'اسلایدهای تور', icon: Compass, count: content.tour.length },
     { id: 'learningSteps', label: 'مراحل یادگیری', icon: ArrowRight, count: content.learningSteps.length },
   ];
 
   // If not admin, show Login screen
   if (!isAdmin) {
     return (
-      <div className="flex min-h-[80vh] items-center justify-center p-4">
+      <div className="flex min-h-[85vh] items-center justify-center p-4">
         <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 sm:p-8 shadow-md text-right">
           <div className="flex flex-col items-center text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary mb-3">
@@ -217,19 +422,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="mt-6 space-y-4">
+          <form onSubmit={handleLoginSubmit} className="mt-6 space-y-4">
             <div>
               <label className="block text-xs font-bold text-ink-2 mb-1.5">
-                رمز عبور مدیریت
+                نام کاربری
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="نام کاربری مدیر..."
+                  className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 pl-10 text-sm text-ink placeholder:text-ink-3 focus:border-primary focus:outline-none"
+                  autoFocus
+                />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-3" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-ink-2 mb-1.5">
+                رمز عبور
               </label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="رمز عبور مدیر را وارد کنید..."
+                  placeholder="رمز عبور مدیر..."
                   className="w-full rounded-xl border border-line bg-surface-2 px-3.5 py-2.5 pl-10 text-sm text-ink placeholder:text-ink-3 focus:border-primary focus:outline-none"
-                  autoFocus
                 />
                 <button
                   type="button"
@@ -249,17 +470,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
               </div>
             )}
 
-            <div className="rounded-xl bg-primary-soft/50 p-2.5 text-xs text-ink-2 border border-line">
-              <p>در حالت پیش‌نمایش، رمز پیش‌فرض: <strong className="font-mono text-primary font-bold">admin</strong> است.</p>
-            </div>
-
             <button
               type="submit"
               disabled={isLoggingIn}
               className="w-full rounded-xl bg-primary py-2.5 text-xs font-bold text-surface hover:bg-primary-hover transition-colors shadow-sm disabled:opacity-50"
             >
-              {isLoggingIn ? 'در حال بررسی...' : 'ورود به پنل مدیریت'}
+              {isLoggingIn ? 'در حال ورود...' : 'ورود به پنل مدیریت'}
             </button>
+
+            {import.meta.env.DEV && (
+              <div className="pt-2 border-t border-line">
+                <button
+                  type="button"
+                  onClick={handleEnterSandbox}
+                  className="w-full rounded-xl border border-line bg-surface-2 py-2 text-xs font-bold text-ink-2 hover:bg-surface hover:text-primary transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>ورود به حالت پیش‌نمایش (Dev Sandbox)</span>
+                </button>
+              </div>
+            )}
 
             <button
               type="button"
@@ -276,8 +506,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
 
   // Admin Dashboard
   return (
-    <div className="flex flex-col gap-6 text-right pb-12">
-      {/* Toast */}
+    <div className="flex flex-col gap-6 text-right pb-16 max-w-5xl mx-auto px-4 sm:px-6 pt-4">
+      {/* Toast Feedback */}
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-2xl bg-ink px-4 py-2.5 text-xs font-bold text-canvas shadow-lg border border-line-strong flex items-center gap-2 animate-fadeIn">
           <CheckCircle2 className="h-4 w-4 text-success" />
@@ -285,11 +515,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
         </div>
       )}
 
+      {/* Red Error Message */}
+      {errorMessage && (
+        <div className="rounded-2xl bg-danger-soft p-4 text-xs font-bold text-danger border border-danger/30 flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={() => setErrorMessage(null)}
+            className="text-danger hover:underline font-normal text-xs"
+          >
+            بستن
+          </button>
+        </div>
+      )}
+
       {/* Hidden file input for import */}
       <input
         ref={fileInputRef}
         type="file"
-        accept=".json"
+        accept=".json,application/json"
         onChange={handleFileChange}
         className="hidden"
       />
@@ -330,12 +576,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
               onClick={onBackToApp}
               className="flex items-center gap-1.5 rounded-xl border border-line bg-surface-2 px-3 py-1.5 text-xs font-bold text-ink hover:bg-surface transition-colors"
             >
-              <span>مشاهده برنامه</span>
+              <span>مشاهده سایت</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
 
             <button
-              onClick={logoutAdmin}
+              onClick={handleLogout}
               className="flex items-center gap-1.5 rounded-xl border border-danger/20 bg-danger-soft px-3 py-1.5 text-xs font-bold text-danger hover:bg-danger hover:text-surface transition-colors"
             >
               <LogOut className="h-3.5 w-3.5" />
@@ -348,7 +594,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={exportContentJson}
+              onClick={handleExportJson}
               className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-bold text-ink-2 hover:text-ink hover:bg-surface-2 transition-colors"
               title="پشتیبان‌گیری از تمام داده‌ها"
             >
@@ -362,16 +608,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
               title="بارگذاری فایل پشتیبان JSON"
             >
               <Upload className="h-3.5 w-3.5" />
-              <span>بارگذاری JSON</span>
-            </button>
-
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-bold text-ink-3 hover:text-danger hover:border-danger/30 transition-colors"
-              title="بازگشت به متن‌های اولیه کارخانه"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span>بازنشانی به پیش‌فرض</span>
+              <span>بازیابی از فایل JSON</span>
             </button>
           </div>
 
@@ -431,26 +668,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
       {activeTab === 'site' && (
         <SiteSettingsEditor
           settings={content.site}
-          onSave={async (newSettings) => {
-            const success = await updateSite(newSettings);
-            if (success) {
-              showToast('تنظیمات عمومی با موفقیت ذخیره شد.');
-            }
-          }}
+          onSave={handleSaveSiteSettings}
         />
       )}
 
-      {/* TAB CONTENT: Collection Items */}
+      {/* TAB CONTENT: Collections */}
       {activeTab !== 'site' && (
-        <div className="flex flex-col gap-4">
-          {/* Search Bar */}
+        <div className="space-y-3">
+          {/* Search bar for items */}
           <div className="relative">
             <input
               type="text"
+              placeholder={`جستجو در بین ${tabs.find((t) => t.id === activeTab)?.label}...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="جستجو در این بخش..."
-              className="w-full rounded-2xl border border-line bg-surface px-4 py-2.5 pl-10 text-xs text-ink placeholder:text-ink-3 focus:border-primary focus:outline-none shadow-sm"
+              className="w-full rounded-2xl border border-line bg-surface px-4 py-2.5 text-xs text-ink placeholder:text-ink-3 focus:border-primary focus:outline-none shadow-sm"
             />
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-3" />
           </div>
@@ -474,36 +706,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
               })
             }
             onTogglePublish={(item) => handleTogglePublish(activeTab as CollectionName, item)}
-            onMoveUp={(index) => handleMove(activeTab as CollectionName, index, 'up')}
-            onMoveDown={(index) => handleMove(activeTab as CollectionName, index, 'down')}
+            onMoveUp={(idx) => handleMove(activeTab as CollectionName, idx, 'up')}
+            onMoveDown={(idx) => handleMove(activeTab as CollectionName, idx, 'down')}
           />
         </div>
       )}
 
-      {/* EDIT / CREATE MODAL */}
+      {/* ITEM EDITOR MODAL */}
       {editingItem && (
         <ItemEditorModal
           collection={editingItem.collection as CollectionName}
           item={editingItem.data}
           isNew={editingItem.isNew}
           stations={content.stations}
+          isSandbox={isSandboxMode}
           onClose={() => setEditingItem(null)}
           onSave={async (savedData) => {
-            if (editingItem.isNew) {
-              const success = await addItem(
-                editingItem.collection as CollectionName,
-                savedData as unknown as Omit<CollectionItem, 'id' | 'sortOrder'>
-              );
-              if (success) showToast('مورد جدید با موفقیت اضافه شد.');
-            } else if (editingItem.data) {
-              const success = await updateItem(
-                editingItem.collection as CollectionName,
-                editingItem.data.id,
-                savedData as unknown as Partial<CollectionItem>
-              );
-              if (success) showToast('تغییرات با موفقیت ذخیره شد.');
+            try {
+              if (editingItem.isNew) {
+                const created = await adminAddItem(
+                  editingItem.collection as CollectionName,
+                  savedData as unknown as Omit<CollectionItem, 'id' | 'sortOrder'>,
+                  isSandboxMode
+                );
+                setContent((prev) => ({
+                  ...prev,
+                  [editingItem.collection as CollectionName]: [
+                    ...(prev[editingItem.collection as CollectionName] as CollectionItem[]),
+                    created,
+                  ],
+                  updatedAt: new Date().toISOString(),
+                }));
+                showToast('مورد جدید با موفقیت اضافه شد.');
+              } else if (editingItem.data) {
+                const updated = await adminUpdateItem(
+                  editingItem.collection as CollectionName,
+                  editingItem.data.id,
+                  { ...editingItem.data, ...savedData } as CollectionItem,
+                  isSandboxMode
+                );
+                setContent((prev) => ({
+                  ...prev,
+                  [editingItem.collection as CollectionName]: (
+                    prev[editingItem.collection as CollectionName] as CollectionItem[]
+                  ).map((x) => (x.id === editingItem.data!.id ? updated : x)),
+                  updatedAt: new Date().toISOString(),
+                }));
+                showToast('تغییرات با موفقیت ذخیره شد.');
+              }
+              setEditingItem(null);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : 'خطای ناشناخته';
+              showError(`ذخیره نشد: ${msg}`);
             }
-            setEditingItem(null);
           }}
         />
       )}
@@ -537,33 +792,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
         </Modal>
       )}
 
-      {/* RESET TO DEFAULT CONFIRM MODAL */}
-      {showResetConfirm && (
+      {/* IMPORT CONFIRMATION MODAL */}
+      {showImportModal && pendingImportBundle && (
         <Modal
-          onClose={() => setShowResetConfirm(false)}
-          title="بازنشانی به محتوای پیش‌فرض"
+          onClose={() => {
+            if (!isImporting) {
+              setShowImportModal(false);
+              setPendingImportBundle(null);
+            }
+          }}
+          title="تأیید بازیابی داده‌های پشتیبان"
           maxWidth="max-w-md"
         >
           <div className="space-y-4 text-right">
-            <div className="rounded-2xl bg-danger-soft p-3 text-xs text-danger font-bold border border-danger/20 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-              <span>هشدار: تمام ویرایش‌ها به حالت اولیه کارخانه بازگردانده خواهند شد.</span>
+            <div className="rounded-2xl bg-danger-soft p-3.5 text-xs text-danger font-bold border border-danger/20 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+              <span>هشدار: تمام داده‌های فعلی با محتوای این فایل جایگزین خواهند شد.</span>
             </div>
+
             <p className="text-xs text-ink-2 leading-relaxed">
-              اگر پیش‌تر تغییراتی در متن‌ها، ایستگاه‌ها، سوالات یا داستان‌ها اعمال کرده‌اید، با این کار جایگزین نسخه پیش‌فرض خواهند شد.
+              تعداد ایستگاه‌ها: <strong className="text-ink">{pendingImportBundle.stations?.length || 0}</strong> ·{' '}
+              تعداد سوالات: <strong className="text-ink">{pendingImportBundle.questions?.length || 0}</strong> ·{' '}
+              نسخه: <span className="font-mono text-ink font-bold">{pendingImportBundle.version}</span>
             </p>
+
+            <div>
+              <label className="block text-xs font-bold text-ink-2 mb-1.5">
+                برای تأیید نهایی، لطفاً عبارت <span className="text-danger font-black">«تایید»</span> را در کادر زیر تایپ کنید:
+              </label>
+              <input
+                type="text"
+                value={importConfirmText}
+                onChange={(e) => setImportConfirmText(e.target.value)}
+                placeholder="تایید"
+                className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none text-center font-bold"
+                autoFocus
+              />
+            </div>
+
+            {importError && (
+              <p className="text-xs font-bold text-danger">{importError}</p>
+            )}
+
             <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
               <button
-                onClick={() => setShowResetConfirm(false)}
+                type="button"
+                disabled={isImporting}
+                onClick={() => {
+                  setShowImportModal(false);
+                  setPendingImportBundle(null);
+                }}
                 className="rounded-xl border border-line px-3.5 py-1.5 text-xs font-bold text-ink-2 hover:bg-surface-2"
               >
                 انصراف
               </button>
               <button
-                onClick={handleConfirmReset}
-                className="rounded-xl bg-danger px-4 py-1.5 text-xs font-bold text-surface hover:bg-danger/90 shadow-sm"
+                type="button"
+                disabled={isImporting || (importConfirmText.trim() !== 'تایید' && importConfirmText.trim() !== 'تأیید')}
+                onClick={handleConfirmImport}
+                className="rounded-xl bg-danger px-4 py-1.5 text-xs font-bold text-surface hover:bg-danger/90 shadow-sm disabled:opacity-40"
               >
-                تأیید و بازنشانی
+                {isImporting ? 'در حال بازیابی...' : 'تأیید و جایگزینی کامل'}
               </button>
             </div>
           </div>
@@ -764,7 +1053,7 @@ const CollectionList: React.FC<CollectionListProps> = ({
               <button
                 type="button"
                 onClick={() => onDelete(item)}
-                className="rounded-xl p-1.5 text-ink-3 hover:text-danger hover:bg-danger-soft transition-colors"
+                className="rounded-xl border border-line bg-surface p-1.5 text-ink-3 hover:text-danger hover:border-danger/30 transition-colors"
                 title="حذف"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -814,13 +1103,17 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5 text-right">
-      <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-primary">هویت برند و تیترهای اصلی</h3>
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Brand & Identity */}
+      <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">
+        <h3 className="text-sm font-bold text-ink border-b border-line pb-2 flex items-center gap-2">
+          <Globe className="h-4 w-4 text-primary" />
+          <span>هویت بصری و برند سامانه</span>
+        </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">نام سامانه (برند)</label>
+            <label className="block text-xs font-bold text-ink-2 mb-1">نام برند</label>
             <input
               type="text"
               value={formData.brandName}
@@ -830,7 +1123,7 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">نام سازمان متولی</label>
+            <label className="block text-xs font-bold text-ink-2 mb-1">نام سازمان / پردیس</label>
             <input
               type="text"
               value={formData.orgName}
@@ -839,7 +1132,7 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
             />
           </div>
 
-          <div className="sm:col-span-2">
+          <div>
             <label className="block text-xs font-bold text-ink-2 mb-1">شعار برند (Tagline)</label>
             <input
               type="text"
@@ -849,14 +1142,28 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
             />
           </div>
         </div>
+
+        <div>
+          <label className="block text-xs font-bold text-ink-2 mb-1">پیام پایان و بدرقه (Farewell)</label>
+          <textarea
+            rows={2}
+            value={formData.farewellText}
+            onChange={(e) => handleChange('farewellText', e.target.value)}
+            className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
+          />
+        </div>
       </div>
 
-      <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-primary">تیتر و معرفی صفحه اصلی (Hero)</h3>
+      {/* Hero & Onboarding Settings */}
+      <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">
+        <h3 className="text-sm font-bold text-ink border-b border-line pb-2 flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-primary" />
+          <span>تنظیمات صفحه اصلی و خوش‌آمدگویی</span>
+        </h3>
 
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">تیتر کوچک بالای عنوان (Kicker)</label>
+            <label className="block text-xs font-bold text-ink-2 mb-1">تیتر کوچک هیرو (Kicker)</label>
             <input
               type="text"
               value={formData.heroKicker}
@@ -864,9 +1171,8 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
               className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
             />
           </div>
-
           <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان اصلی (Title)</label>
+            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان هیرو (Hero Title)</label>
             <input
               type="text"
               value={formData.heroTitle}
@@ -874,36 +1180,50 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
               className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
             />
           </div>
+        </div>
 
+        <div>
+          <label className="block text-xs font-bold text-ink-2 mb-1">زیرعنوان هیرو (Hero Subtitle)</label>
+          <textarea
+            rows={2}
+            value={formData.heroSubtitle}
+            onChange={(e) => handleChange('heroSubtitle', e.target.value)}
+            className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">توضیحات زیرعنوان (Subtitle)</label>
-            <textarea
-              rows={2}
-              value={formData.heroSubtitle}
-              onChange={(e) => handleChange('heroSubtitle', e.target.value)}
+            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان خوش‌آمدگویی (Onboarding)</label>
+            <input
+              type="text"
+              value={formData.onboardingTitle}
+              onChange={(e) => handleChange('onboardingTitle', e.target.value)}
+              className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-ink-2 mb-1">زیرعنوان خوش‌آمدگویی</label>
+            <input
+              type="text"
+              value={formData.onboardingSubtitle}
+              onChange={(e) => handleChange('onboardingSubtitle', e.target.value)}
               className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
             />
           </div>
         </div>
       </div>
 
-      <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-primary">آزمون خارجی و لینک پردیس گِرا</h3>
+      {/* External Test Integration Settings */}
+      <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">
+        <h3 className="text-sm font-bold text-ink border-b border-line pb-2 flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span>تنظیمات آزمون خارجی شخصیت‌شناسی (External Test)</span>
+        </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-bold text-ink-2 mb-1">آدرس اینترنتی آزمون گِرا</label>
-            <input
-              type="url"
-              dir="ltr"
-              value={formData.externalTestUrl}
-              onChange={(e) => handleChange('externalTestUrl', e.target.value)}
-              className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
-            />
-          </div>
-
           <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان کارت آزمون</label>
+            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان بنر آزمون</label>
             <input
               type="text"
               value={formData.externalTestTitle}
@@ -913,7 +1233,7 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">متن دکمه آزمون</label>
+            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان دکمه</label>
             <input
               type="text"
               value={formData.externalTestButton}
@@ -921,35 +1241,50 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
               className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
             />
           </div>
+        </div>
 
-          <div className="sm:col-span-2">
-            <label className="block text-xs font-bold text-ink-2 mb-1">توضیح کوتاه کارت آزمون</label>
-            <input
-              type="text"
-              value={formData.externalTestSubtitle}
-              onChange={(e) => handleChange('externalTestSubtitle', e.target.value)}
-              className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
-            />
-          </div>
+        <div>
+          <label className="block text-xs font-bold text-ink-2 mb-1">زیرعنوان بنر آزمون</label>
+          <input
+            type="text"
+            value={formData.externalTestSubtitle}
+            onChange={(e) => handleChange('externalTestSubtitle', e.target.value)}
+            className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-ink-2 mb-1">آدرس اینترنتی آزمون (URL)</label>
+          <input
+            type="url"
+            dir="ltr"
+            value={formData.externalTestUrl}
+            onChange={(e) => handleChange('externalTestUrl', e.target.value)}
+            className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+          />
         </div>
       </div>
 
-      <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-primary">صفحه «چرا درنگ؟»</h3>
+      {/* Why Page Content */}
+      <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">
+        <h3 className="text-sm font-bold text-ink border-b border-line pb-2 flex items-center gap-2">
+          <HelpCircle className="h-4 w-4 text-primary" />
+          <span>محتوای صفحه «چرا درنگ؟»</span>
+        </h3>
 
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">مقدمه صفحه چرا درنگ</label>
-            <textarea
-              rows={3}
-              value={formData.whyPage.intro}
-              onChange={(e) => handleWhyChange('intro', e.target.value)}
-              className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
-            />
-          </div>
+        <div>
+          <label className="block text-xs font-bold text-ink-2 mb-1">مقدمه صفحه (Intro)</label>
+          <textarea
+            rows={3}
+            value={formData.whyPage.intro}
+            onChange={(e) => handleWhyChange('intro', e.target.value)}
+            className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
+          />
+        </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان هدف نهایی</label>
+            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان بخش هدف غایی</label>
             <input
               type="text"
               value={formData.whyPage.goalTitle}
@@ -957,9 +1292,8 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
               className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
             />
           </div>
-
           <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">متن هدف نهایی</label>
+            <label className="block text-xs font-bold text-ink-2 mb-1">متن بخش هدف غایی</label>
             <textarea
               rows={2}
               value={formData.whyPage.goalText}
@@ -970,13 +1304,14 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
         </div>
       </div>
 
-      <div className="sticky bottom-4 z-20 flex justify-end">
+      {/* Save Button */}
+      <div className="flex justify-end">
         <button
           type="submit"
           disabled={isSaving}
-          className="rounded-2xl bg-primary px-6 py-2.5 text-xs font-bold text-surface hover:bg-primary-hover transition-colors shadow-md disabled:opacity-50"
+          className="rounded-2xl bg-primary px-6 py-2.5 text-xs font-bold text-surface hover:bg-primary-hover transition-colors shadow-sm disabled:opacity-50"
         >
-          {isSaving ? 'در حال ذخیره...' : 'ذخیره تمام تنظیمات'}
+          {isSaving ? 'در حال ذخیره...' : 'ذخیره تمام تنظیمات سایت'}
         </button>
       </div>
     </form>
@@ -986,13 +1321,12 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
 // --------------------------------------------------------------------------
 // Item Editor Modal Component
 // --------------------------------------------------------------------------
-type FormRecord = Record<string, string | number | boolean | string[] | undefined>;
-
 interface ItemEditorModalProps {
   collection: CollectionName;
   item: CollectionItem | null;
   isNew: boolean;
   stations: Station[];
+  isSandbox: boolean;
   onClose: () => void;
   onSave: (data: FormRecord) => Promise<void>;
 }
@@ -1002,12 +1336,12 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
   item,
   isNew,
   stations,
+  isSandbox,
   onClose,
   onSave,
 }) => {
   const [form, setForm] = useState<FormRecord>(() => {
     if (item) return { ...item } as unknown as FormRecord;
-    // Default initial template based on collection
     switch (collection) {
       case 'stations':
         return { title: '', desc: '', isPublished: true };
@@ -1044,6 +1378,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
           quote: '',
           colorBg: 'bg-warning-soft',
           colorPrimary: 'text-warning-ink',
+          imageUrl: '',
           isPublished: true,
         };
       case 'audioStories':
@@ -1117,6 +1452,36 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
   };
 
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const handleFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: string,
+    kind: 'audio' | 'video' | 'image'
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadProgress(0);
+    setUploadError(null);
+
+    try {
+      const res = await adminUploadMedia(
+        file,
+        kind,
+        (percent) => setUploadProgress(percent),
+        isSandbox
+      );
+      setForm((prev) => ({ ...prev, [field]: res.url }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در بارگذاری فایل';
+      setUploadError(msg);
+    } finally {
+      setUploadProgress(null);
+      e.target.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1135,7 +1500,14 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
       maxWidth="max-w-xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4 text-right">
-        {/* Render specific inputs based on collection */}
+        {uploadError && (
+          <div className="rounded-xl bg-danger-soft p-3 text-xs font-bold text-danger border border-danger/20 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span>{uploadError}</span>
+          </div>
+        )}
+
+        {/* Collection specific fields */}
         {collection === 'stations' && (
           <>
             <div>
@@ -1210,13 +1582,13 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
             <div className="flex items-center gap-2 pt-1">
               <input
                 type="checkbox"
-                id="critical"
+                id="criticalCheck"
                 checked={!!form.critical}
                 onChange={(e) => setForm({ ...form, critical: e.target.checked })}
-                className="h-4 w-4 rounded text-primary focus:ring-primary"
+                className="h-4 w-4 rounded text-danger focus:ring-danger"
               />
-              <label htmlFor="critical" className="text-xs font-bold text-ink cursor-pointer">
-                این پرسش «حیاتی» است (پاسخ منفی در گزارش به رنگ قرمز برجسته می‌شود)
+              <label htmlFor="criticalCheck" className="text-xs font-bold text-danger cursor-pointer">
+                این سؤال یک شاخص حیاتی (Critical) است و پاسخ خیر به آن نیاز به تدبیر فوری دارد.
               </label>
             </div>
           </>
@@ -1224,9 +1596,9 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
 
         {collection === 'perimeters' && (
           <>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">حرف اختصاری</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">حرف مخفف (Tag)</label>
                 <input
                   type="text"
                   maxLength={2}
@@ -1237,29 +1609,28 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">نام انگلیسی</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">عنوان انگلیسی</label>
                 <input
                   type="text"
-                  dir="ltr"
                   required
                   value={valStr('en')}
                   onChange={(e) => setForm({ ...form, en: e.target.value })}
                   className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">نام فارسی</label>
-                <input
-                  type="text"
-                  required
-                  value={valStr('fa')}
-                  onChange={(e) => setForm({ ...form, fa: e.target.value })}
-                  className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
-                />
-              </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">شرح دام</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">عنوان فارسی دام شناختی</label>
+              <input
+                type="text"
+                required
+                value={valStr('fa')}
+                onChange={(e) => setForm({ ...form, fa: e.target.value })}
+                className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-ink-2 mb-1">شرح دام شناختی</label>
               <textarea
                 rows={2}
                 required
@@ -1269,7 +1640,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">پرسش مکث هوشیار</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">پرسش مکث (سنجش خود)</label>
               <textarea
                 rows={2}
                 required
@@ -1279,7 +1650,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">راهکار خروج از دام</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">راهکار مهار و بیداری</label>
               <textarea
                 rows={2}
                 required
@@ -1304,7 +1675,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">شرح و کاربرد</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">شرح شایستگی رهبری</label>
               <textarea
                 rows={3}
                 required
@@ -1320,7 +1691,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
           <>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">حرف لاتین (S, O, N, I, C)</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">حرف SONIC</label>
                 <input
                   type="text"
                   maxLength={1}
@@ -1331,10 +1702,9 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">عبارت انگلیسی</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">عنوان انگلیسی ابزار</label>
                 <input
                   type="text"
-                  dir="ltr"
                   required
                   value={valStr('en')}
                   onChange={(e) => setForm({ ...form, en: e.target.value })}
@@ -1344,7 +1714,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">ترجمه فارسی گام</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">عنوان فارسی اقدام</label>
                 <input
                   type="text"
                   required
@@ -1354,7 +1724,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">ابزار عملیاتی</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">نام ابزار کاربردی</label>
                 <input
                   type="text"
                   required
@@ -1365,7 +1735,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">شرح نحوه اجرا</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">شرح و نحوه اجرای ابزار</label>
               <textarea
                 rows={3}
                 required
@@ -1381,7 +1751,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
           <>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">نام کهن‌الگو / چهره</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">نام شخصیت</label>
                 <input
                   type="text"
                   required
@@ -1391,7 +1761,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">لقب / عنوان</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">عنوان الگوی تصمیم</label>
                 <input
                   type="text"
                   required
@@ -1402,7 +1772,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">نقطه قوت برجسته</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">نقطه قوت اصلی</label>
               <textarea
                 rows={2}
                 required
@@ -1412,7 +1782,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">سایه و خطر افراط (پاشنه آشیل)</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">سایه و نقطه ضعف (روی دیگر قوت)</label>
               <textarea
                 rows={2}
                 required
@@ -1422,7 +1792,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">پرسش بازتابی</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">پرسش تأمل‌برانگیز</label>
               <textarea
                 rows={2}
                 required
@@ -1440,6 +1810,37 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 onChange={(e) => setForm({ ...form, quote: e.target.value })}
                 className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-ink-2 mb-1">تصویر پرتره (اختیاری)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  dir="ltr"
+                  placeholder="https://... یا انتخاب فایل"
+                  value={valStr('imageUrl')}
+                  onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                  className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+                />
+                <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>آپلود</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, 'imageUrl', 'image')}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              {uploadProgress !== null && (
+                <div className="mt-1.5 h-1.5 w-full bg-surface-2 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-200"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
             </div>
           </>
         )}
@@ -1480,15 +1881,35 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">آدرس فایل صوتی (اختیاری)</label>
-              <input
-                type="url"
-                dir="ltr"
-                placeholder="https://..."
-                value={valStr('audioUrl')}
-                onChange={(e) => setForm({ ...form, audioUrl: e.target.value })}
-                className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
-              />
+              <label className="block text-xs font-bold text-ink-2 mb-1">فایل صوتی</label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  dir="ltr"
+                  placeholder="https://... یا انتخاب فایل صوتی"
+                  value={valStr('audioUrl')}
+                  onChange={(e) => setForm({ ...form, audioUrl: e.target.value })}
+                  className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+                />
+                <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>آپلود صوت</span>
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={(e) => handleFileUpload(e, 'audioUrl', 'audio')}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+              {uploadProgress !== null && (
+                <div className="mt-1.5 h-1.5 w-full bg-surface-2 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-200"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-ink-2 mb-1">خلاصه روایت</label>
@@ -1548,18 +1969,51 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               </div>
               <div>
                 <label className="block text-xs font-bold text-ink-2 mb-1">آدرس ویدیو (MP4 یا آپارات/یوتیوب)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    dir="ltr"
+                    placeholder="https://..."
+                    value={valStr('videoUrl')}
+                    onChange={(e) => setForm({ ...form, videoUrl: e.target.value })}
+                    className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+                  />
+                  <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
+                    <Upload className="h-3.5 w-3.5" />
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => handleFileUpload(e, 'videoUrl', 'video')}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-ink-2 mb-1">تصویر کاور ویدیو (Poster URL)</label>
+              <div className="flex gap-2">
                 <input
                   type="url"
                   dir="ltr"
                   placeholder="https://..."
-                  value={valStr('videoUrl')}
-                  onChange={(e) => setForm({ ...form, videoUrl: e.target.value })}
-                  className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+                  value={valStr('posterUrl')}
+                  onChange={(e) => setForm({ ...form, posterUrl: e.target.value })}
+                  className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
                 />
+                <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
+                  <Upload className="h-3.5 w-3.5" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, 'posterUrl', 'image')}
+                    className="hidden"
+                  />
+                </label>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">توضیحات</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">توضیحات ویدیو</label>
               <textarea
                 rows={2}
                 required
@@ -1569,7 +2023,17 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">پرسش بازتابی</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">نقل‌قول یا پیام محوری</label>
+              <input
+                type="text"
+                required
+                value={valStr('quote')}
+                onChange={(e) => setForm({ ...form, quote: e.target.value })}
+                className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-ink-2 mb-1">پرسش تأمل‌برانگیز</label>
               <textarea
                 rows={2}
                 required
@@ -1588,6 +2052,18 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
               />
             </div>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="showOnStoriesCheck"
+                checked={!!form.showOnStories}
+                onChange={(e) => setForm({ ...form, showOnStories: e.target.checked })}
+                className="h-4 w-4 rounded text-primary focus:ring-primary"
+              />
+              <label htmlFor="showOnStoriesCheck" className="text-xs font-bold text-ink cursor-pointer">
+                نمایش این ویدیو در صفحه عبرت‌ها و روایت‌های زنده (Stories)
+              </label>
+            </div>
           </>
         )}
 
@@ -1595,7 +2071,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
           <>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">دسته‌بندی</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">دسته‌بندی موضوعی</label>
                 <input
                   type="text"
                   required
@@ -1605,7 +2081,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">ارجاع در کتاب (فصل)</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">ارجاع کتاب (فصل / بخش)</label>
                 <input
                   type="text"
                   required
@@ -1616,9 +2092,9 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">پرسش</label>
-              <textarea
-                rows={2}
+              <label className="block text-xs font-bold text-ink-2 mb-1">متن پرسش</label>
+              <input
+                type="text"
                 required
                 value={valStr('q')}
                 onChange={(e) => setForm({ ...form, q: e.target.value })}
@@ -1626,7 +2102,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">پاسخ تحلیلی</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">پاسخ تفصیلی</label>
               <textarea
                 rows={3}
                 required
@@ -1823,7 +2299,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
         {collection === 'learningSteps' && (
           <>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">عنوان گام یادگیری</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">عنوان مرحله</label>
               <input
                 type="text"
                 required
@@ -1845,7 +2321,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
             <div>
               <label className="block text-xs font-bold text-ink-2 mb-1">صفحه مقصد</label>
               <select
-                value={valStr('screen')}
+                value={valStr('screen', 'why')}
                 onChange={(e) => setForm({ ...form, screen: e.target.value })}
                 className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
               >

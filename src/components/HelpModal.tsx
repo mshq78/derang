@@ -1,8 +1,8 @@
 import React from 'react';
 import { Lightbulb, Compass } from 'lucide-react';
-import { HELP_CONTENT } from '../data/dorangData';
 import { Screen } from '../types';
 import { HelpEntry } from '../types/content';
+import { DEFAULT_CONTENT } from '../data/defaultContent';
 import { Modal } from './Modal';
 
 interface HelpModalProps {
@@ -13,12 +13,22 @@ interface HelpModalProps {
 }
 
 export const HelpModal: React.FC<HelpModalProps> = ({ screen, onClose, onOpenTour, helpEntries }) => {
-  const dynamicHelp = helpEntries?.find((h) => h.screen === screen && h.isPublished);
-  const fallback = HELP_CONTENT[screen] || HELP_CONTENT.home;
+  const publishedEntries = helpEntries?.filter((h) => h.isPublished) || [];
+  const dynamicHelp =
+    publishedEntries.find((h) => h.screen === screen) ||
+    publishedEntries.find((h) => h.screen === 'home');
 
-  const title = dynamicHelp?.title || fallback.title;
-  const body = dynamicHelp?.body || fallback.body;
-  const tip = dynamicHelp?.tip || fallback.tip;
+  const defaultHelp =
+    DEFAULT_CONTENT.help.find((h) => h.screen === screen) ||
+    DEFAULT_CONTENT.help.find((h) => h.screen === 'home') || {
+      title: 'راهنمای سامانه درنگ',
+      body: 'درنگ ابزاری برای سنجش و بازبینی هوشیارانه تصمیمات است.',
+      tip: 'پیش از اقدام نهایی، همواره لحظه‌ای درنگ کنید.',
+    };
+
+  const title = dynamicHelp?.title || defaultHelp.title;
+  const body = dynamicHelp?.body || defaultHelp.body;
+  const tip = dynamicHelp?.tip || defaultHelp.tip;
 
   const footer = (
     <>

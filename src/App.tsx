@@ -33,18 +33,21 @@ import {
   UserProfile,
   AppSettings,
   LibraryFilter,
+  ArchetypeDef,
 } from './types';
 import {
-  STATIONS as DEFAULT_STATIONS,
-  QUESTIONS as DEFAULT_QUESTIONS,
-  PERIMETERS as DEFAULT_PERIMETERS,
-  SKILLS as DEFAULT_SKILLS,
-  SONIC as DEFAULT_SONIC,
-  PEOPLE as DEFAULT_PEOPLE,
-  AUDIO_STORIES as DEFAULT_AUDIO_STORIES,
-  BOOK_QA as DEFAULT_BOOK_QA,
-  CHALLENGES as DEFAULT_CHALLENGES,
-} from './data/dorangData';
+  Station,
+  Question,
+  Perimeter,
+  Skill,
+  SonicTool,
+  Person,
+  AudioStory,
+  VideoItem,
+  BookQA,
+  Challenge,
+} from './types/content';
+import { DEFAULT_CONTENT } from './data/defaultContent';
 import {
   toPersianDigits,
   formatDisplayDate,
@@ -70,7 +73,6 @@ import { TourModal } from './components/TourModal';
 import { HelpModal } from './components/HelpModal';
 import { Confetti } from './components/Confetti';
 import { EditDecisionModal } from './components/EditDecisionModal';
-import { AdminPanel } from './components/AdminPanel';
 
 const STORAGE_KEY = 'gera_dorang_unified_v2';
 
@@ -99,92 +101,88 @@ function DerangApp() {
 
   // Dynamic content mapping with fallback to bundled defaults
   const STATIONS = useMemo(() => {
-    const pub = content.stations.filter((s) => s.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_STATIONS;
+    const pub = content.stations.filter((s: Station) => s.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_CONTENT.stations;
   }, [content.stations]);
 
   const QUESTIONS = useMemo(() => {
-    const pub = content.questions.filter((q) => q.isPublished);
-    if (pub.length > 0) {
-      const idToIdx = new Map(content.stations.map((s, i) => [s.id, i]));
-      return pub.map((q) => ({
-        id: q.id,
-        station: idToIdx.get(q.stationId) ?? 0,
-        text: q.text,
-        help: q.help,
-        exercise: q.exercise,
-        critical: q.critical,
-      }));
-    }
-    return DEFAULT_QUESTIONS;
-  }, [content.questions, STATIONS]);
+    const pub = content.questions.filter((q: Question) => q.isPublished);
+    const sourceQuestions = pub.length > 0 ? pub : DEFAULT_CONTENT.questions;
+    const sourceStations = content.stations.filter((s: Station) => s.isPublished);
+    const stationsList = sourceStations.length > 0 ? sourceStations : DEFAULT_CONTENT.stations;
+    const idToIdx = new Map(stationsList.map((s, i) => [s.id, i]));
+    return sourceQuestions.map((q: Question) => ({
+      id: q.id,
+      station: idToIdx.get(q.stationId) ?? 0,
+      text: q.text,
+      help: q.help,
+      exercise: q.exercise,
+      critical: q.critical,
+    }));
+  }, [content.questions, content.stations]);
 
   const PERIMETERS = useMemo(() => {
-    const pub = content.perimeters.filter((p) => p.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_PERIMETERS;
+    const pub = content.perimeters.filter((p: Perimeter) => p.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_CONTENT.perimeters;
   }, [content.perimeters]);
 
   const SKILLS = useMemo(() => {
-    const pub = content.skills.filter((s) => s.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_SKILLS;
+    const pub = content.skills.filter((s: Skill) => s.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_CONTENT.skills;
   }, [content.skills]);
 
   const SONIC = useMemo(() => {
-    const pub = content.sonic.filter((s) => s.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_SONIC;
+    const pub = content.sonic.filter((s: SonicTool) => s.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_CONTENT.sonic;
   }, [content.sonic]);
 
   const PEOPLE = useMemo(() => {
-    const pub = content.people.filter((p) => p.isPublished);
-    if (pub.length > 0) {
-      const res: Record<string, import('./types').ArchetypeDef> = {};
-      pub.forEach((p) => {
-        res[p.id] = {
-          id: p.id,
-          name: p.name,
-          title: p.title,
-          strength: p.strength,
-          shadow: p.shadow,
-          reflectionQuestion: p.reflectionQuestion,
-          quote: p.quote,
-          color: `${p.colorBg} ${p.colorPrimary}`,
-          avatarSeed: p.id,
-          imageUrl: p.imageUrl,
-        };
-      });
-      return res;
-    }
-    return DEFAULT_PEOPLE;
+    const pub = content.people.filter((p: Person) => p.isPublished);
+    const sourcePeople = pub.length > 0 ? pub : DEFAULT_CONTENT.people;
+    const res: Record<string, ArchetypeDef> = {};
+    sourcePeople.forEach((p: Person) => {
+      res[p.id] = {
+        id: p.id,
+        name: p.name,
+        title: p.title,
+        strength: p.strength,
+        shadow: p.shadow,
+        reflectionQuestion: p.reflectionQuestion,
+        quote: p.quote,
+        color: `${p.colorBg} ${p.colorPrimary}`,
+        avatarSeed: p.id,
+        imageUrl: p.imageUrl,
+      };
+    });
+    return res;
   }, [content.people]);
 
   const AUDIO_STORIES = useMemo(() => {
-    const pub = content.audioStories.filter((a) => a.isPublished);
-    if (pub.length > 0) {
-      return pub.map((a) => ({
-        key: a.id,
-        title: a.title,
-        subtitle: a.subtitle,
-        dur: toPersianDigits(formatDuration(a.durationSeconds)),
-        seconds: a.durationSeconds,
-        tags: a.tags,
-        desc: a.desc,
-        transcript: a.transcript,
-        takeaway: a.takeaway,
-        audioUrl: a.audioUrl,
-        coverUrl: a.coverUrl,
-      }));
-    }
-    return DEFAULT_AUDIO_STORIES;
+    const pub = content.audioStories.filter((a: AudioStory) => a.isPublished);
+    const sourceAudio = pub.length > 0 ? pub : DEFAULT_CONTENT.audioStories;
+    return sourceAudio.map((a: AudioStory) => ({
+      key: a.id,
+      title: a.title,
+      subtitle: a.subtitle,
+      dur: toPersianDigits(formatDuration(a.durationSeconds)),
+      seconds: a.durationSeconds,
+      tags: a.tags,
+      desc: a.desc,
+      transcript: a.transcript,
+      takeaway: a.takeaway,
+      audioUrl: a.audioUrl,
+      coverUrl: a.coverUrl,
+    }));
   }, [content.audioStories]);
 
   const BOOK_QA = useMemo(() => {
-    const pub = content.bookQA.filter((b) => b.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_BOOK_QA;
+    const pub = content.bookQA.filter((b: BookQA) => b.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_CONTENT.bookQA;
   }, [content.bookQA]);
 
   const CHALLENGES = useMemo(() => {
-    const pub = content.challenges.filter((c) => c.isPublished);
-    return pub.length > 0 ? pub : DEFAULT_CHALLENGES;
+    const pub = content.challenges.filter((c: Challenge) => c.isPublished);
+    return pub.length > 0 ? pub : DEFAULT_CONTENT.challenges;
   }, [content.challenges]);
 
   const LEARNING_STEPS = useMemo(() => {
@@ -836,7 +834,6 @@ function DerangApp() {
           playSoundEffect('exit', settings.sound, settings.fxVolume);
           setScreen('farewell');
         }}
-        onOpenAdmin={() => setScreen('admin')}
         brandName={content.site.brandName}
         orgName={content.site.orgName}
         tagline={content.site.tagline}
@@ -2820,19 +2817,14 @@ function DerangApp() {
             </div>
           )
         )}
-        {screen === 'admin' && (
-          <AdminPanel onBackToApp={() => setScreen('home')} />
-        )}
       </main>
 
-      {/* Bottom Navigation (Hidden on admin screen for maximum workspace) */}
-      {screen !== 'admin' && (
-        <BottomNav
-          currentScreen={screen}
-          onNavigate={handleNavigate}
-          decisionCount={decisions.length}
-        />
-      )}
+      {/* Bottom Navigation */}
+      <BottomNav
+        currentScreen={screen}
+        onNavigate={handleNavigate}
+        decisionCount={decisions.length}
+      />
 
       {/* Toast Notification */}
       {toastMessage && (
@@ -2857,10 +2849,6 @@ function DerangApp() {
           onBackup={handleBackupDownload}
           onRestore={handleRestoreFile}
           onClearData={handleClearAllData}
-          onNavigateToAdmin={() => {
-            setActiveModal('none');
-            setScreen('admin');
-          }}
         />
       )}
 
