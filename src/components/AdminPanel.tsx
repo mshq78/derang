@@ -38,6 +38,7 @@ import {
   CollectionItemMap,
   Station,
 } from '../types/content';
+import { aparatHash, normalizeVideoInput } from '../utils/videoEmbed';
 import { DEFAULT_CONTENT } from '../data/defaultContent';
 import {
   adminLogin,
@@ -2033,14 +2034,14 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">آدرس ویدیو (MP4 یا آپارات/یوتیوب)</label>
+                <label className="block text-xs font-bold text-ink-2 mb-1">آدرس ویدیو (فایل MP4، لینک یا کد امبد آپارات، لینک یوتیوب)</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     dir="ltr"
-                    placeholder="https://..."
+                    placeholder="https://www.aparat.com/v/... یا کد امبد"
                     value={valStr('videoUrl')}
-                    onChange={(e) => setForm({ ...form, videoUrl: e.target.value })}
+                    onChange={(e) => setForm({ ...form, videoUrl: normalizeVideoInput(e.target.value) })}
                     className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
                   />
                   <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
@@ -2053,6 +2054,11 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                     />
                   </label>
                 </div>
+                {aparatHash(valStr('videoUrl')) && (
+                  <p className="mt-1 text-[13px] font-medium text-success-ink">
+                    ویدئوی آپارات شناسایی شد و در سایت پخش می‌شود.
+                  </p>
+                )}
               </div>
             </div>
             <div>

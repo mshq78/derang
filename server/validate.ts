@@ -1,6 +1,7 @@
 import type { CollectionName, ContentBundle, SiteSettings } from '../src/types/content.js';
 import { badRequest } from './http.js';
 import { normalizeMediaUrl } from './media.js';
+import { normalizeVideoInput } from '../src/utils/videoEmbed.js';
 
 export const COLLECTIONS: CollectionName[] = [
   'stations',
@@ -174,7 +175,9 @@ export function cleanItem(collection: CollectionName, input: unknown, label = ''
       }
       case 'url': {
         const v = value === undefined || value === null ? '' : value;
-        const cleanUrl = typeof v === 'string' ? normalizeMediaUrl(v.trim()) : v;
+        // videoUrl also accepts Aparat's embed code, stored as the Aparat page link.
+        const raw = typeof v === 'string' && key === 'videoUrl' ? normalizeVideoInput(v) : v;
+        const cleanUrl = typeof raw === 'string' ? normalizeMediaUrl(raw.trim()) : raw;
         if (typeof cleanUrl !== 'string' || !isSafeUrl(cleanUrl)) {
           throw fail('باید یک نشانی http یا https معتبر باشد.');
         }

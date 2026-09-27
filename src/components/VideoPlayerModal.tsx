@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertOctagon, Video } from 'lucide-react';
 import { Modal } from './Modal';
+import { videoEmbedUrl } from '../utils/videoEmbed';
 
 interface VideoPlayerModalProps {
   onClose: () => void;
@@ -25,11 +26,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   reflectionQuestion = 'اگر این تصمیمی که امروز پیش‌روی شماست، یک ماه دیگر هم به بهانه «صبر کنیم ببینیم چه می‌شود» به تعویق بیفتد، دقیقاً چه فرصت یا سرمایه‌ای ممکن است برای همیشه نابود شود؟',
   whyImportant = 'شاه سلطان حسین نماد بارز «تعلل خوش‌خیالانه» است. او خردمندانه سکوت نمی‌کرد، بلکه از سر ناتوانی در تحمل رنج تصمیم‌گیری به عافیت‌طلبی پناه برده بود. درنگ به شما یادآوری می‌کند که تصمیم نگرفتن، خود یک تصمیم بسیار پرریسک است.',
 }) => {
-  const isEmbed =
-    videoUrl &&
-    (videoUrl.includes('youtube.com') ||
-      videoUrl.includes('youtu.be') ||
-      videoUrl.includes('aparat.com'));
+  // Aparat/YouTube page links cannot be framed directly; use their embed address.
+  const embedUrl = videoUrl ? videoEmbedUrl(videoUrl) : null;
 
   return (
     <Modal
@@ -42,10 +40,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       {/* Video Content or Placeholder */}
       <div className="overflow-hidden rounded-2xl border border-line bg-surface-2">
         {videoUrl ? (
-          isEmbed ? (
+          embedUrl ? (
             <div className="relative aspect-video w-full">
               <iframe
-                src={videoUrl}
+                src={embedUrl}
                 title={title}
                 className="absolute inset-0 h-full w-full border-0"
                 allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
