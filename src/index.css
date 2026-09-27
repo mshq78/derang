@@ -31,11 +31,23 @@
   --animate-fadeIn: fadeIn 180ms ease-out forwards;
   --animate-slideUp: slideUp 220ms ease-out forwards;
   --animate-confettiPop: confettiPop 1100ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --animate-cardIn: cardIn 380ms cubic-bezier(0.2, 0.75, 0.2, 1) both;
 }
 
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes cardIn {
+  from {
+    transform: translateY(24px) scale(0.86);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {

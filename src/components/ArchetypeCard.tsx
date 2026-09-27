@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { RefreshCw, ExternalLink, Sparkles, AlertTriangle } from 'lucide-react';
+import { RefreshCw, ExternalLink, Sparkles, AlertTriangle, Maximize2 } from 'lucide-react';
 import { ArchetypeDef } from '../types';
+import { CardViewer } from './CardViewer';
 
 interface ArchetypeCardProps {
   archetype: ArchetypeDef;
@@ -11,25 +12,38 @@ interface ArchetypeCardProps {
   externalTestButton?: string;
 }
 
-const ArchetypePortrait: React.FC<{ id: string; name: string; imageUrl?: string }> = ({
-  id,
-  name,
-  imageUrl,
-}) => {
+const ArchetypePortrait: React.FC<{
+  id: string;
+  name: string;
+  imageUrl?: string;
+  onOpen?: () => void;
+}> = ({ id, name, imageUrl, onOpen }) => {
   // Fall back to the drawn portrait if there is no image or it fails to load.
   const [imageFailed, setImageFailed] = useState(false);
   if (imageUrl && !imageFailed) {
+    // Card images are posters with text on them: show them whole, never cropped.
     return (
-      <div className="aspect-square w-full overflow-hidden rounded-2xl border border-line bg-surface-2 shadow-inner">
-        <img
-          src={imageUrl}
-          alt={`تصویر ${name}`}
-          loading="lazy"
-          decoding="async"
-          onError={() => setImageFailed(true)}
-          className="h-full w-full object-cover"
-        />
-      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="group block w-full cursor-zoom-in text-right"
+        aria-label={`نمایش کامل کارت ${name}`}
+      >
+        <div className="aspect-[2/3] w-full overflow-hidden rounded-2xl border border-line bg-surface-2 shadow-sm transition-transform group-hover:scale-[1.02]">
+          <img
+            src={imageUrl}
+            alt={`تصویر ${name}`}
+            loading="lazy"
+            decoding="async"
+            onError={() => setImageFailed(true)}
+            className="h-full w-full object-contain"
+          />
+        </div>
+        <span className="mt-2 flex items-center justify-center gap-1.5 text-[13px] font-bold text-primary">
+          <Maximize2 className="h-3.5 w-3.5" />
+          برای دیدن کامل بزنید
+        </span>
+      </button>
     );
   }
 
@@ -85,6 +99,8 @@ export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({
   const [isFlipped, setIsFlipped] = useState(false);
   // The back (shadow) has its own image; without one, keep showing the front image.
   const portraitUrl = (isFlipped && archetype.backImageUrl) || archetype.imageUrl || '';
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const viewerFront = archetype.imageUrl || archetype.backImageUrl || '';
 
   return (
     <div className="w-full flex flex-col gap-4">
@@ -92,14 +108,24 @@ export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({
       <div className="relative overflow-hidden rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-sm transition-all">
         <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start">
           {/* Portrait frame */}
-          <div className="w-36 sm:w-44 flex-shrink-0">
+          <div className={`${portraitUrl ? 'w-52 sm:w-60' : 'w-36 sm:w-44'} flex-shrink-0`}>
             <ArchetypePortrait
               key={`${archetype.id}-${portraitUrl}`}
               id={archetype.id}
               name={archetype.name}
               imageUrl={portraitUrl}
+              onOpen={() => setViewerOpen(true)}
             />
           </div>
+          {viewerOpen && viewerFront && (
+            <CardViewer
+              name={archetype.name}
+              frontUrl={viewerFront}
+              backUrl={archetype.imageUrl ? archetype.backImageUrl : undefined}
+              initialSide={isFlipped ? 'back' : 'front'}
+              onClose={() => setViewerOpen(false)}
+            />
+          )}
 
           {/* Details body */}
           <div className="flex-1 text-right w-full">
