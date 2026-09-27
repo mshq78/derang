@@ -492,11 +492,19 @@ export const adminUploadMedia = (
 
   // The browser uploads straight to Vercel Blob; /api/admin/blob-upload only
   // checks the admin session and issues a short-lived upload token.
+  // The store is either public or private; the server says which, and a
+  // private file is then referenced through the site's /api/media/ path.
+  let access: 'public' | 'private' = 'private';
+
   // Loaded on demand so regular visitors never download the upload client.
-  return import('@vercel/blob/client')
+  return apiFetch<{ access: 'public' | 'private' }>('/api/admin/media-config', { method: 'GET' }, true)
+    .then((config) => {
+      access = config.access;
+      return import('@vercel/blob/client');
+    })
     .then(({ upload }) =>
       upload(`${kind}/${safeName}`, file, {
-        access: 'public',
+        access,
         handleUploadUrl: `${getBaseUrl()}/api/admin/blob-upload`,
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         contentType: file.type || undefined,
@@ -505,7 +513,7 @@ export const adminUploadMedia = (
       })
     )
     .then((blob) => ({
-      url: blob.url,
+      url: access === 'private' ? `/api/media/${blob.pathname.split('/').map(encodeURIComponent).join('/')}` : blob.url,
       contentType: blob.contentType || file.type,
       size: file.size,
     }))

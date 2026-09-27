@@ -1,5 +1,6 @@
 import type { CollectionName, ContentBundle, SiteSettings } from '../src/types/content.js';
 import { badRequest } from './http.js';
+import { normalizeMediaUrl } from './media.js';
 
 export const COLLECTIONS: CollectionName[] = [
   'stations',
@@ -172,10 +173,11 @@ export function cleanItem(collection: CollectionName, input: unknown, label = ''
       }
       case 'url': {
         const v = value === undefined || value === null ? '' : value;
-        if (typeof v !== 'string' || !isSafeUrl(v.trim())) {
+        const cleanUrl = typeof v === 'string' ? normalizeMediaUrl(v.trim()) : v;
+        if (typeof cleanUrl !== 'string' || !isSafeUrl(cleanUrl)) {
           throw fail('باید یک نشانی http یا https معتبر باشد.');
         }
-        data[key] = v.trim();
+        data[key] = cleanUrl;
         break;
       }
       case 'color': {

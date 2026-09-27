@@ -21,6 +21,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ story, volume }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(story.seconds || 240);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -58,8 +59,15 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ story, volume }) => {
       notifyPlay(story.key);
       audioRef.current
         .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
+        .then(() => {
+          setIsPlaying(true);
+          setLoadError(false);
+        })
+        .catch((err: unknown) => {
+          setIsPlaying(false);
+          // NotAllowedError only means the browser blocked autoplay; anything else is a load failure.
+          if (!(err instanceof DOMException && err.name === 'NotAllowedError')) setLoadError(true);
+        });
     }
   };
 
@@ -108,6 +116,10 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ story, volume }) => {
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
           onEnded={handleEnded}
+          onError={() => {
+            setIsPlaying(false);
+            setLoadError(true);
+          }}
         />
       )}
 
@@ -184,6 +196,11 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ story, volume }) => {
               فایل صوتی به‌زودی اضافه می‌شود
             </span>
           </div>
+        )}
+        {story.audioUrl && loadError && (
+          <p className="text-[13px] font-medium text-danger-ink" role="alert">
+            فایل صوتی باز نشد. لطفاً کمی بعد دوباره امتحان کنید.
+          </p>
         )}
       </div>
 

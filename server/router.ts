@@ -9,6 +9,7 @@ import {
   writeBundle,
 } from './content.js';
 import { badRequest, errorResponse, json, noContent, notFound, readJson } from './http.js';
+import { blobAccess, mediaRedirect } from './media.js';
 import { ensureReady } from './schema.js';
 import { createUploadToken } from './upload.js';
 import { isCollection, isValidId } from './validate.js';
@@ -36,6 +37,11 @@ export async function handle(request: Request): Promise<Response> {
 
     if (seg.length === 1 && seg[0] === 'health' && method === 'GET') {
       return json({ ok: true });
+    }
+
+    // Media redirects need no database, so they skip ensureReady().
+    if (seg[0] === 'media' && seg.length > 1 && method === 'GET') {
+      return await mediaRedirect(seg.slice(1));
     }
 
     await ensureReady();
@@ -82,6 +88,10 @@ export async function handle(request: Request): Promise<Response> {
           await writeBundle(await readJson(request), 'replace');
           return json({ ok: true });
         }
+        break;
+
+      case 'media-config':
+        if (method === 'GET' && route.length === 1) return json({ access: blobAccess() });
         break;
 
       case 'blob-upload':

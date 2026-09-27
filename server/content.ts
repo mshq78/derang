@@ -4,14 +4,22 @@ import { DEFAULT_CONTENT } from '../src/data/defaultContent.js';
 import { getDb, Row, Statement } from './db.js';
 import { conflict, notFound } from './http.js';
 import { cleanBundle, cleanItem, cleanSite, COLLECTIONS } from './validate.js';
+import { normalizeMediaUrl } from './media.js';
 
 type Item = Record<string, unknown> & { id: string; sortOrder: number; isPublished: boolean };
 
 const ITEM_COLUMNS = 'collection, id, sort_order, is_published, data';
 
+const MEDIA_FIELDS = ['audioUrl', 'coverUrl', 'imageUrl', 'videoUrl', 'posterUrl'];
+
 function rowToItem(row: Row): Item {
+  const data = { ...(row.data as Record<string, unknown>) };
+  // Values saved before /api/media existed may hold expiring private-blob links.
+  for (const field of MEDIA_FIELDS) {
+    if (typeof data[field] === 'string') data[field] = normalizeMediaUrl(data[field] as string);
+  }
   return {
-    ...(row.data as Record<string, unknown>),
+    ...data,
     id: row.id as string,
     sortOrder: row.sort_order as number,
     isPublished: row.is_published as boolean,
