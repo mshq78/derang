@@ -11,7 +11,28 @@ interface ArchetypeCardProps {
   externalTestButton?: string;
 }
 
-const ArchetypePortrait: React.FC<{ id: string; name: string }> = ({ id, name }) => {
+const ArchetypePortrait: React.FC<{ id: string; name: string; imageUrl?: string }> = ({
+  id,
+  name,
+  imageUrl,
+}) => {
+  // Fall back to the drawn portrait if there is no image or it fails to load.
+  const [imageFailed, setImageFailed] = useState(false);
+  if (imageUrl && !imageFailed) {
+    return (
+      <div className="aspect-square w-full overflow-hidden rounded-2xl border border-line bg-surface-2 shadow-inner">
+        <img
+          src={imageUrl}
+          alt={`تصویر ${name}`}
+          loading="lazy"
+          decoding="async"
+          onError={() => setImageFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      </div>
+    );
+  }
+
   const getColors = () => {
     switch (id) {
       case 'davinci':
@@ -70,7 +91,12 @@ export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({
         <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start">
           {/* Portrait frame */}
           <div className="w-36 sm:w-44 flex-shrink-0">
-            <ArchetypePortrait id={archetype.id} name={archetype.name} />
+            <ArchetypePortrait
+              key={archetype.imageUrl || archetype.id}
+              id={archetype.id}
+              name={archetype.name}
+              imageUrl={archetype.imageUrl}
+            />
           </div>
 
           {/* Details body */}
