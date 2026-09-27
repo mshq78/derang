@@ -83,6 +83,8 @@ export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({
   externalTestButton,
 }) => {
   const [isFlipped, setIsFlipped] = useState(false);
+  // The back (shadow) has its own image; without one, keep showing the front image.
+  const portraitUrl = (isFlipped && archetype.backImageUrl) || archetype.imageUrl || '';
 
   return (
     <div className="w-full flex flex-col gap-4">
@@ -92,10 +94,10 @@ export const ArchetypeCard: React.FC<ArchetypeCardProps> = ({
           {/* Portrait frame */}
           <div className="w-36 sm:w-44 flex-shrink-0">
             <ArchetypePortrait
-              key={archetype.imageUrl || archetype.id}
+              key={`${archetype.id}-${portraitUrl}`}
               id={archetype.id}
               name={archetype.name}
-              imageUrl={archetype.imageUrl}
+              imageUrl={portraitUrl}
             />
           </div>
 

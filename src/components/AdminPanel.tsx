@@ -1404,6 +1404,7 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
           colorBg: 'bg-warning-soft',
           colorPrimary: 'text-warning-ink',
           imageUrl: '',
+          backImageUrl: '',
           isPublished: true,
         };
       case 'audioStories':
@@ -1837,8 +1838,16 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">تصویر پرتره (اختیاری)</label>
+              <label className="block text-xs font-bold text-ink-2 mb-1">تصویر روی کارت، نقطه قوت (اختیاری)</label>
               <div className="flex gap-2">
+                {valStr('imageUrl') && (
+                  <img
+                    src={valStr('imageUrl')}
+                    alt=""
+                    className="h-9 w-9 flex-shrink-0 rounded-lg border border-line object-cover"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                  />
+                )}
                 <input
                   type="text"
                   dir="ltr"
@@ -1858,15 +1867,46 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                   />
                 </label>
               </div>
-              {uploadProgress !== null && (
-                <div className="mt-1.5 h-1.5 w-full bg-surface-2 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-200"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              )}
             </div>
+            <div>
+              <label className="block text-xs font-bold text-ink-2 mb-1">تصویر پشت کارت، سایه (اختیاری)</label>
+              <div className="flex gap-2">
+                {valStr('backImageUrl') && (
+                  <img
+                    src={valStr('backImageUrl')}
+                    alt=""
+                    className="h-9 w-9 flex-shrink-0 rounded-lg border border-line object-cover"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                  />
+                )}
+                <input
+                  type="text"
+                  dir="ltr"
+                  placeholder="https://... یا انتخاب فایل"
+                  value={valStr('backImageUrl')}
+                  onChange={(e) => setForm({ ...form, backImageUrl: e.target.value })}
+                  className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+                />
+                <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>آپلود</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, 'backImageUrl', 'image')}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+            {uploadProgress !== null && (
+              <div className="h-1.5 w-full bg-surface-2 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-200"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            )}
           </>
         )}
 

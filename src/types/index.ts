@@ -75,6 +75,7 @@ export interface ArchetypeDef {
   color: string;
   avatarSeed: string;
   imageUrl?: string;
+  backImageUrl?: string;
 }
 
 export interface AudioStoryDef {

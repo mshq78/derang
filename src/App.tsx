@@ -160,6 +160,7 @@ function DerangApp() {
         color: `${p.colorBg} ${p.colorPrimary}`,
         avatarSeed: p.id,
         imageUrl: p.imageUrl,
+        backImageUrl: p.backImageUrl,
       };
     });
     return res;

@@ -10,7 +10,7 @@ type Item = Record<string, unknown> & { id: string; sortOrder: number; isPublish
 
 const ITEM_COLUMNS = 'collection, id, sort_order, is_published, data';
 
-const MEDIA_FIELDS = ['audioUrl', 'coverUrl', 'imageUrl', 'videoUrl', 'posterUrl'];
+const MEDIA_FIELDS = ['audioUrl', 'coverUrl', 'imageUrl', 'backImageUrl', 'videoUrl', 'posterUrl'];
 
 function rowToItem(row: Row): Item {
   const data = { ...(row.data as Record<string, unknown>) };

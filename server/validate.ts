@@ -67,6 +67,7 @@ const SPECS: Record<CollectionName, Record<string, Field>> = {
     colorBg: { t: 'color' },
     colorPrimary: { t: 'color' },
     imageUrl: url,
+    backImageUrl: url,
   },
   audioStories: {
     title: text(300),

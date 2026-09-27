@@ -85,7 +85,8 @@ export interface Person extends Base {
   quote: string;
   colorBg: string;
   colorPrimary: string;
-  imageUrl?: string;
+  imageUrl?: string;      // front of the card (strength)
+  backImageUrl?: string;  // back of the card (shadow)
 }
 
 export interface AudioStory extends Base {
