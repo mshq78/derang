@@ -265,6 +265,12 @@ export function cleanSite(input: unknown): SiteSettings {
     throw badRequest('مقادیر تنظیمات سایت باید متن باشند.', 'validation');
   }
   const site = input as SiteSettings;
+  if (typeof site.introAudioUrl === 'string') {
+    site.introAudioUrl = normalizeMediaUrl(site.introAudioUrl.trim());
+    if (!isSafeUrl(site.introAudioUrl)) {
+      throw badRequest('نشانی فایل معرفی صوتی معتبر نیست.', 'validation');
+    }
+  }
   if (typeof site.externalTestUrl === 'string' && !isSafeUrl(site.externalTestUrl.trim())) {
     throw badRequest('نشانی آزمون گِرا باید با http یا https شروع شود.', 'validation');
   }

@@ -1218,6 +1218,31 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
           />
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان معرفی صوتی صفحه اصلی</label>
+            <input
+              type="text"
+              value={formData.introAudioTitle ?? ''}
+              onChange={(e) => handleChange('introAudioTitle', e.target.value)}
+              className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-ink-2 mb-1">
+              نشانی فایل معرفی صوتی (خالی = نمایش داده نشود)
+            </label>
+            <input
+              type="text"
+              dir="ltr"
+              placeholder="https://... (نشانی فایل در Blob)"
+              value={formData.introAudioUrl ?? ''}
+              onChange={(e) => handleChange('introAudioUrl', e.target.value)}
+              className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+            />
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-ink-2 mb-1">عنوان خوش‌آمدگویی (Onboarding)</label>

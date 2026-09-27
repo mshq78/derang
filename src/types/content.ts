@@ -11,6 +11,8 @@ export interface SiteSettings {
   heroKicker: string;           // "همراه اختصاصی تصمیم‌گیری"
   heroTitle: string;            // "پیش از یک تصمیم مهم، چند دقیقه «درنگ» کنید."
   heroSubtitle: string;
+  introAudioTitle: string;     // title of the short intro audio on the home page
+  introAudioUrl: string;       // empty = no intro audio
   onboardingTitle: string;
   onboardingSubtitle: string;
   farewellText: string;

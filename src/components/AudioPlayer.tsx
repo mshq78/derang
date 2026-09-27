@@ -12,8 +12,16 @@ interface AudioPlayerProps {
 type StopListener = (activeKey: string) => void;
 const stopListeners = new Set<StopListener>();
 
-const notifyPlay = (activeKey: string) => {
+export const notifyPlay = (activeKey: string) => {
   stopListeners.forEach((listener) => listener(activeKey));
+};
+
+/** Subscribes to "another player started"; returns the unsubscribe function. */
+export const onOtherPlayback = (listener: StopListener): (() => void) => {
+  stopListeners.add(listener);
+  return () => {
+    stopListeners.delete(listener);
+  };
 };
 
 export const AudioPlayer: React.FC<AudioPlayerProps> = ({ story, volume }) => {

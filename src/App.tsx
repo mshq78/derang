@@ -66,6 +66,7 @@ import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { ArchetypeCard } from './components/ArchetypeCard';
 import { AudioPlayer } from './components/AudioPlayer';
+import { IntroAudio } from './components/IntroAudio';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SettingsModal } from './components/SettingsModal';
 import { TourModal } from './components/TourModal';
@@ -904,6 +905,14 @@ function DerangApp() {
                 <p className="mt-2 text-sm text-ink-2 leading-relaxed font-normal">
                   {content.site.heroSubtitle}
                 </p>
+
+                {content.site.introAudioUrl && (
+                  <IntroAudio
+                    url={content.site.introAudioUrl}
+                    title={content.site.introAudioTitle || 'معرفی صوتی'}
+                    volume={settings.volume}
+                  />
+                )}
 
                 <div className="mt-6 flex flex-wrap gap-2.5">
                   <button
