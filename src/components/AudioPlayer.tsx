@@ -132,8 +132,18 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ story, volume }) => {
       )}
 
       {/* Top Meta */}
-      <div className="flex items-start justify-between gap-3 text-right">
-        <div>
+      <div className="flex items-start gap-3 text-right">
+        {story.coverUrl && (
+          <img
+            src={story.coverUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="h-16 w-16 flex-shrink-0 rounded-xl border border-line bg-surface-2 object-cover"
+            onError={(e) => (e.currentTarget.style.display = 'none')}
+          />
+        )}
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-[13px] font-bold text-primary">
             <Volume2 className="h-4 w-4" />
             <span>روایت صوتی</span>

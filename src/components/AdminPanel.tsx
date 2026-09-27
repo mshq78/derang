@@ -49,12 +49,12 @@ import {
   adminUpdateItem,
   adminDeleteItem,
   adminReorderCollection,
-  adminUploadMedia,
   adminImportContent,
   getAdminToken,
 } from '../lib/api';
 import { toPersianDigits } from '../utils/helpers';
 import { Modal } from './Modal';
+import { MediaField } from './MediaField';
 
 interface AdminPanelProps {
   onBackToApp: () => void;
@@ -695,6 +695,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
           key={content.version}
           settings={content.site}
           onSave={handleSaveSiteSettings}
+          isSandbox={isSandboxMode}
         />
       )}
 
@@ -1098,9 +1099,10 @@ const CollectionList: React.FC<CollectionListProps> = ({
 interface SiteSettingsEditorProps {
   settings: SiteSettings;
   onSave: (settings: SiteSettings) => Promise<void>;
+  isSandbox?: boolean;
 }
 
-const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSave }) => {
+const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSave, isSandbox = false }) => {
   const [formData, setFormData] = useState<SiteSettings>(settings);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -1219,26 +1221,13 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-ink-2 mb-1">عنوان معرفی صوتی صفحه اصلی</label>
-            <input
-              type="text"
-              value={formData.introAudioTitle ?? ''}
-              onChange={(e) => handleChange('introAudioTitle', e.target.value)}
-              className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
-            />
-          </div>
           <div className="sm:col-span-2">
-            <label className="block text-xs font-bold text-ink-2 mb-1">
-              نشانی فایل معرفی صوتی (خالی = نمایش داده نشود)
-            </label>
-            <input
-              type="text"
-              dir="ltr"
-              placeholder="https://... (نشانی فایل در Blob)"
+            <MediaField
+              label="فایل معرفی صوتی (خالی = نمایش داده نشود)"
+              kind="audio"
               value={formData.introAudioUrl ?? ''}
-              onChange={(e) => handleChange('introAudioUrl', e.target.value)}
-              className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+              onChange={(v) => handleChange('introAudioUrl', v)}
+              isSandbox={isSandbox}
             />
           </div>
         </div>
@@ -1504,37 +1493,6 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
   };
 
   const [isSaving, setIsSaving] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
-  const handleFileUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    field: string,
-    kind: 'audio' | 'video' | 'image'
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadProgress(0);
-    setUploadError(null);
-
-    try {
-      const res = await adminUploadMedia(
-        file,
-        kind,
-        (percent) => setUploadProgress(percent),
-        isSandbox
-      );
-      setForm((prev) => ({ ...prev, [field]: res.url }));
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطا در بارگذاری فایل';
-      setUploadError(msg);
-    } finally {
-      setUploadProgress(null);
-      e.target.value = '';
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -1552,13 +1510,6 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
       maxWidth="max-w-xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4 text-right">
-        {uploadError && (
-          <div className="rounded-xl bg-danger-soft p-3 text-xs font-bold text-danger border border-danger/20 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-            <span>{uploadError}</span>
-          </div>
-        )}
-
         {/* Collection specific fields */}
         {collection === 'stations' && (
           <>
@@ -1863,76 +1814,20 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">تصویر روی کارت، نقطه قوت (اختیاری)</label>
-              <div className="flex gap-2">
-                {valStr('imageUrl') && (
-                  <img
-                    src={valStr('imageUrl')}
-                    alt=""
-                    className="h-9 w-9 flex-shrink-0 rounded-lg border border-line object-cover"
-                    onError={(e) => (e.currentTarget.style.display = 'none')}
-                  />
-                )}
-                <input
-                  type="text"
-                  dir="ltr"
-                  placeholder="https://... یا انتخاب فایل"
-                  value={valStr('imageUrl')}
-                  onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-                  className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
-                />
-                <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
-                  <Upload className="h-3.5 w-3.5" />
-                  <span>آپلود</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, 'imageUrl', 'image')}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">تصویر پشت کارت، سایه (اختیاری)</label>
-              <div className="flex gap-2">
-                {valStr('backImageUrl') && (
-                  <img
-                    src={valStr('backImageUrl')}
-                    alt=""
-                    className="h-9 w-9 flex-shrink-0 rounded-lg border border-line object-cover"
-                    onError={(e) => (e.currentTarget.style.display = 'none')}
-                  />
-                )}
-                <input
-                  type="text"
-                  dir="ltr"
-                  placeholder="https://... یا انتخاب فایل"
-                  value={valStr('backImageUrl')}
-                  onChange={(e) => setForm({ ...form, backImageUrl: e.target.value })}
-                  className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
-                />
-                <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
-                  <Upload className="h-3.5 w-3.5" />
-                  <span>آپلود</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, 'backImageUrl', 'image')}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-            {uploadProgress !== null && (
-              <div className="h-1.5 w-full bg-surface-2 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-200"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-            )}
+            <MediaField
+              label="تصویر روی کارت، نقطه قوت (اختیاری)"
+              kind="image"
+              value={valStr('imageUrl')}
+              onChange={(v) => setForm((prev) => ({ ...prev, imageUrl: v }))}
+              isSandbox={isSandbox}
+            />
+            <MediaField
+              label="تصویر پشت کارت، سایه (اختیاری)"
+              kind="image"
+              value={valStr('backImageUrl')}
+              onChange={(v) => setForm((prev) => ({ ...prev, backImageUrl: v }))}
+              isSandbox={isSandbox}
+            />
           </>
         )}
 
@@ -1971,37 +1866,20 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">فایل صوتی</label>
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  dir="ltr"
-                  placeholder="https://... یا انتخاب فایل صوتی"
-                  value={valStr('audioUrl')}
-                  onChange={(e) => setForm({ ...form, audioUrl: e.target.value })}
-                  className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
-                />
-                <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
-                  <Upload className="h-3.5 w-3.5" />
-                  <span>آپلود صوت</span>
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    onChange={(e) => handleFileUpload(e, 'audioUrl', 'audio')}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-              {uploadProgress !== null && (
-                <div className="mt-1.5 h-1.5 w-full bg-surface-2 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-200"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              )}
-            </div>
+            <MediaField
+              label="فایل صوتی"
+              kind="audio"
+              value={valStr('audioUrl')}
+              onChange={(v) => setForm((prev) => ({ ...prev, audioUrl: v }))}
+              isSandbox={isSandbox}
+            />
+            <MediaField
+              label="تصویر کاور روایت (اختیاری)"
+              kind="image"
+              value={valStr('coverUrl')}
+              onChange={(v) => setForm((prev) => ({ ...prev, coverUrl: v }))}
+              isSandbox={isSandbox}
+            />
             <div>
               <label className="block text-xs font-bold text-ink-2 mb-1">خلاصه روایت</label>
               <textarea
@@ -2058,56 +1936,30 @@ const ItemEditorModal: React.FC<ItemEditorModalProps> = ({
                   className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-ink-2 mb-1">آدرس ویدیو (فایل MP4، لینک یا کد امبد آپارات، لینک یوتیوب)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    dir="ltr"
-                    placeholder="https://www.aparat.com/v/... یا کد امبد"
-                    value={valStr('videoUrl')}
-                    onChange={(e) => setForm({ ...form, videoUrl: normalizeVideoInput(e.target.value) })}
-                    className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
-                  />
-                  <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
-                    <Upload className="h-3.5 w-3.5" />
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={(e) => handleFileUpload(e, 'videoUrl', 'video')}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-                {aparatHash(valStr('videoUrl')) && (
-                  <p className="mt-1 text-[13px] font-medium text-success-ink">
-                    ویدئوی آپارات شناسایی شد و در سایت پخش می‌شود.
-                  </p>
-                )}
-              </div>
+              <MediaField
+                label="آدرس ویدیو (فایل MP4، لینک یا کد امبد آپارات، لینک یوتیوب)"
+                kind="video"
+                value={valStr('videoUrl')}
+                onChange={(val) => setForm((prev) => ({ ...prev, videoUrl: val }))}
+                normalize={normalizeVideoInput}
+                placeholder="https://www.aparat.com/v/... یا کد امبد یا آپلود"
+                isSandbox={isSandbox}
+                hint={
+                  aparatHash(valStr('videoUrl')) ? (
+                    <p className="mt-1 text-[13px] font-medium text-success-ink">
+                      ویدئوی آپارات شناسایی شد و در سایت پخش می‌شود.
+                    </p>
+                  ) : undefined
+                }
+              />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-ink-2 mb-1">تصویر کاور ویدیو (Poster URL)</label>
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  dir="ltr"
-                  placeholder="https://..."
-                  value={valStr('posterUrl')}
-                  onChange={(e) => setForm({ ...form, posterUrl: e.target.value })}
-                  className="flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
-                />
-                <label className="flex items-center gap-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs font-bold text-ink hover:bg-surface cursor-pointer">
-                  <Upload className="h-3.5 w-3.5" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, 'posterUrl', 'image')}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
+            <MediaField
+              label="تصویر کاور ویدیو (اختیاری)"
+              kind="image"
+              value={valStr('posterUrl')}
+              onChange={(v) => setForm((prev) => ({ ...prev, posterUrl: v }))}
+              isSandbox={isSandbox}
+            />
             <div>
               <label className="block text-xs font-bold text-ink-2 mb-1">توضیحات ویدیو</label>
               <textarea
