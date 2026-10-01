@@ -23,11 +23,12 @@ export class AuthError extends Error {
 
 const TIMEOUT_MS = 10000;
 
-async function authFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** Calls an endpoint under /api with the session cookie; `path` is relative to /api/auth/ unless it starts with a slash. */
+export async function authFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${getBaseUrl()}/api/auth/${path}`, {
+    const res = await fetch(path.startsWith('/') ? `${getBaseUrl()}/api${path}` : `${getBaseUrl()}/api/auth/${path}`, {
       ...init,
       // The session lives in an HttpOnly cookie, so this only works on the site's own domain.
       credentials: 'same-origin',

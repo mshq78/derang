@@ -133,6 +133,9 @@ export const MembersPage: React.FC<{ canWrite: boolean; notify: (message: string
             <option value="active">فعال</option>
             <option value="disabled">غیرفعال</option>
             <option value="no_password">بدون رمز عبور</option>
+            <option value="group1">گروه ۱</option>
+            <option value="group2">گروه ۲</option>
+            <option value="no_group">بدون گروه</option>
           </select>
         </div>
 
@@ -157,6 +160,7 @@ export const MembersPage: React.FC<{ canWrite: boolean; notify: (message: string
                   <tr>
                     <th className="px-4 py-2.5 font-bold">نام</th>
                     <th className="px-4 py-2.5 font-bold">شماره موبایل</th>
+                    <th className="px-4 py-2.5 font-bold">گروه</th>
                     <th className="px-4 py-2.5 font-bold">وضعیت</th>
                     <th className="px-4 py-2.5 font-bold">آخرین ورود</th>
                     {canWrite && <th className="px-4 py-2.5 font-bold">عملیات</th>}
@@ -167,6 +171,7 @@ export const MembersPage: React.FC<{ canWrite: boolean; notify: (message: string
                     <tr key={m.id} className="hover:bg-surface-2/40">
                       <td className="px-4 py-2.5 font-bold text-ink">{fullName(m)}</td>
                       <td className="px-4 py-2.5 font-mono text-ink-2" dir="ltr">{toPersianDigits(m.phone)}</td>
+                      <td className="px-4 py-2.5 text-xs text-ink-2">{m.tripGroup ? `گروه ${toPersianDigits(m.tripGroup)}` : '—'}</td>
                       <td className="px-4 py-2.5"><StatusBadges m={m} /></td>
                       <td className="px-4 py-2.5 text-xs text-ink-3">{formatDate(m.lastLoginAt)}</td>
                       {canWrite && (
@@ -267,6 +272,7 @@ export const MembersPage: React.FC<{ canWrite: boolean; notify: (message: string
 const StatusBadges: React.FC<{ m: Member }> = ({ m }) => (
   <div className="flex flex-wrap gap-1">
     {m.disabled ? <Badge tone="danger">غیرفعال</Badge> : <Badge tone="success">فعال</Badge>}
+    {m.tripGroup && <Badge tone="primary">گروه {toPersianDigits(m.tripGroup)}</Badge>}
     {!m.hasPassword && <Badge tone="warning">بدون رمز</Badge>}
   </div>
 );
@@ -291,6 +297,7 @@ const MemberFormDialog: React.FC<{ member?: Member; onClose: () => void; onSaved
   const [firstName, setFirstName] = useState(member?.firstName ?? '');
   const [lastName, setLastName] = useState(member?.lastName ?? '');
   const [password, setPassword] = useState('');
+  const [tripGroup, setTripGroup] = useState(member?.tripGroup ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -301,8 +308,8 @@ const MemberFormDialog: React.FC<{ member?: Member; onClose: () => void; onSaved
     setBusy(true);
     setError(null);
     try {
-      if (member) await updateMember(member.id, { phone, firstName, lastName });
-      else await createMember({ phone, firstName, lastName, password });
+      if (member) await updateMember(member.id, { phone, firstName, lastName, tripGroup: tripGroup || null });
+      else await createMember({ phone, firstName, lastName, password, tripGroup: tripGroup || null });
       onSaved();
     } catch (err) {
       setError(errorText(err));
@@ -327,6 +334,13 @@ const MemberFormDialog: React.FC<{ member?: Member; onClose: () => void; onSaved
       </div>
       <Field label="شماره موبایل (نام کاربری)" hint="با صفر یا بدون صفر اول، هر دو درست است.">
         <input className={`${inputClass} text-left`} dir="ltr" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="09123456789" />
+      </Field>
+      <Field label="گروه سفر" hint="فقط اعضای گروه، بازی سفر را می‌بینند.">
+        <select className={inputClass} value={tripGroup} onChange={(e) => setTripGroup(e.target.value)}>
+          <option value="">بدون گروه</option>
+          <option value="1">گروه ۱</option>
+          <option value="2">گروه ۲</option>
+        </select>
       </Field>
       {!member && (
         <Field label="رمز عبور" hint="مثلاً شماره پرسنلی. بعد از ذخیره قابل مشاهده نیست.">
@@ -389,12 +403,14 @@ const DeleteDialog: React.FC<{ member: Member; onClose: () => void; onDeleted: (
 // Bulk import from Excel / CSV with column mapping
 // ---------------------------------------------------------------------------
 
-type Field4 = 'phone' | 'password' | 'firstName' | 'lastName';
+type Field4 = 'phone' | 'password' | 'firstName' | 'lastName' | 'group1' | 'group2';
 const FIELD_LABELS: Record<Field4, string> = {
   phone: 'شماره موبایل (نام کاربری)',
   password: 'رمز عبور',
   firstName: 'نام',
   lastName: 'نام خانوادگی',
+  group1: 'ستون گروه ۱ (هر کس علامت دارد)',
+  group2: 'ستون گروه ۲ (هر کس علامت دارد)',
 };
 
 /** Picks a likely column for each field from the header text. */
@@ -406,7 +422,9 @@ function guessMapping(header: string[]): Record<Field4, number> {
   const phone = idx((h) => h.includes('موبایل') || h.includes('همراه') || h.includes('تلفن') || h.includes('mobile') || h.includes('phone') || h === 'شماره');
   let firstName = idx((h) => h === 'نام' || h.includes('firstname') || h === 'name');
   if (firstName < 0) firstName = idx((h) => h.includes('نام') && !h.includes('خانوادگی') && !h.includes('کاربری'));
-  return { phone, password, firstName, lastName };
+  const group1 = idx((h) => h.includes('گروهیک') || h.includes('گروه1') || h.includes('گروه۱'));
+  const group2 = idx((h) => h.includes('گروهدو') || h.includes('گروه2') || h.includes('گروه۲'));
+  return { phone, password, firstName, lastName, group1, group2 };
 }
 
 async function readTable(file: File): Promise<string[][]> {
@@ -426,7 +444,7 @@ const ImportDialog: React.FC<{ onClose: () => void; onDone: (summary: string) =>
   const [table, setTable] = useState<string[][] | null>(null);
   const [fileName, setFileName] = useState('');
   const [hasHeader, setHasHeader] = useState(true);
-  const [mapping, setMapping] = useState<Record<Field4, number>>({ phone: -1, password: -1, firstName: -1, lastName: -1 });
+  const [mapping, setMapping] = useState<Record<Field4, number>>({ phone: -1, password: -1, firstName: -1, lastName: -1, group1: -1, group2: -1 });
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -447,7 +465,7 @@ const ImportDialog: React.FC<{ onClose: () => void; onDone: (summary: string) =>
       setFileName(file.name);
       const looksLikeHeader = normalizeIranMobile(rows[0].find((c) => normalizeIranMobile(c)) ?? '') === null;
       setHasHeader(looksLikeHeader);
-      setMapping(looksLikeHeader ? guessMapping(rows[0]) : { phone: 0, password: 1, firstName: 2, lastName: 3 });
+      setMapping(looksLikeHeader ? guessMapping(rows[0]) : { phone: 0, password: 1, firstName: 2, lastName: 3, group1: -1, group2: -1 });
     } catch (err) {
       setError(`فایل خوانده نشد: ${errorText(err)}`);
     }
@@ -461,6 +479,12 @@ const ImportDialog: React.FC<{ onClose: () => void; onDone: (summary: string) =>
         password: mapping.password >= 0 ? (r[mapping.password] ?? '') : '',
         firstName: mapping.firstName >= 0 ? (r[mapping.firstName] ?? '') : '',
         lastName: mapping.lastName >= 0 ? (r[mapping.lastName] ?? '') : '',
+        tripGroup:
+          mapping.group1 >= 0 && (r[mapping.group1] ?? '').trim()
+            ? '1'
+            : mapping.group2 >= 0 && (r[mapping.group2] ?? '').trim()
+              ? '2'
+              : null,
       })),
     [dataRows, mapping]
   );
@@ -539,7 +563,7 @@ const ImportDialog: React.FC<{ onClose: () => void; onDone: (summary: string) =>
               </label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {(Object.keys(FIELD_LABELS) as Field4[]).map((f) => (
-                  <Field key={f} label={FIELD_LABELS[f] + (f === 'lastName' ? ' (اختیاری)' : '')}>
+                  <Field key={f} label={FIELD_LABELS[f] + (f === 'lastName' || f === 'group1' || f === 'group2' ? ' (اختیاری)' : '')}>
                     <select className={inputClass} value={mapping[f]} onChange={(e) => setMapping((m) => ({ ...m, [f]: Number(e.target.value) }))}>
                       <option value={-1}>— انتخاب کنید —</option>
                       {Array.from({ length: columns }, (_, i) => (

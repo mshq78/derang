@@ -7,6 +7,8 @@ interface CardViewerProps {
   frontUrl: string;
   backUrl?: string;
   initialSide?: 'front' | 'back';
+  /** Called whenever a side is shown (including the first), so a caller can tell both were seen. */
+  onSideShown?: (side: 'front' | 'back') => void;
   onClose: () => void;
 }
 
@@ -38,9 +40,14 @@ export const CardViewer: React.FC<CardViewerProps> = ({
   frontUrl,
   backUrl,
   initialSide = 'front',
+  onSideShown,
   onClose,
 }) => {
   const [flipped, setFlipped] = useState(initialSide === 'back' && !!backUrl);
+  useEffect(() => {
+    onSideShown?.(flipped ? 'back' : 'front');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flipped]);
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstButtonRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);

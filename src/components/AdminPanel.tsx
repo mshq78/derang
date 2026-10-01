@@ -1157,8 +1157,10 @@ const PhoneLoginCard: React.FC<{
   onToggleOpenAccess: (value: boolean) => void;
   passwordEnabled: boolean;
   onTogglePassword: (value: boolean) => void;
+  tripMode: boolean;
+  onToggleTripMode: (value: boolean) => void;
   isSandbox: boolean;
-}> = ({ enabled, onToggle, openAccess, onToggleOpenAccess, passwordEnabled, onTogglePassword, isSandbox }) => {
+}> = ({ enabled, onToggle, openAccess, onToggleOpenAccess, passwordEnabled, onTogglePassword, tripMode, onToggleTripMode, isSandbox }) => {
   const [status, setStatus] = useState<SmsStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [testPhone, setTestPhone] = useState('');
@@ -1209,6 +1211,22 @@ const PhoneLoginCard: React.FC<{
             روشن: همه بدون وارد کردن نام یا شماره موبایل مستقیم وارد سایت می‌شوند؛ مثلاً برای وقتی که سامانه پیامکی
             می‌خواهد محتوای سایت را برای تأیید پترن ببیند. پس از تأیید، آن را خاموش کنید. با «ذخیره» اعمال می‌شود و
             برای بازدیدکنندگانی که قبلاً سایت را باز کرده‌اند تا حدود یک دقیقه بعد (با بازکردن دوباره‌ی صفحه) دیده می‌شود.
+          </span>
+        </span>
+      </label>
+
+      <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-primary/30 bg-primary-soft px-3.5 py-3">
+        <input
+          type="checkbox"
+          checked={tripMode}
+          onChange={(e) => onToggleTripMode(e.target.checked)}
+          className="mt-1 h-4 w-4 accent-primary"
+        />
+        <span>
+          <span className="block text-xs font-bold text-primary">حالت سفر (بازی مسیر اصفهان تا بابلسر)</span>
+          <span className="block text-[13px] text-ink-2 leading-relaxed mt-0.5">
+            روشن: کاربرانی که «گروه سفر» دارند فقط صفحه‌ی بازی را می‌بینند و بقیه‌ی برنامه برایشان پنهان است. مرحله‌ها از بخش «کنترل سفر» باز می‌شوند.
+            بعد از رسیدن، آن را خاموش کنید تا برنامه‌ی کامل برگردد. با «ذخیره» اعمال می‌شود.
           </span>
         </span>
       </label>
@@ -1512,6 +1530,8 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
         onToggleOpenAccess={(value) => handleChange('openAccess', value)}
         passwordEnabled={formData.passwordLoginEnabled === true}
         onTogglePassword={(value) => handleChange('passwordLoginEnabled', value)}
+        tripMode={formData.tripMode === true}
+        onToggleTripMode={(value) => handleChange('tripMode', value)}
         isSandbox={isSandbox}
       />
 

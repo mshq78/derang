@@ -3,6 +3,7 @@ import { useContent } from './context/ContentContext';
 import { FarewellScreen } from './components/FarewellScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { AuthUser, fetchMe, logoutUser, saveUserProfile } from './lib/userAuth';
+import { JourneyApp } from './journey/JourneyApp';
 import { STORAGE_KEY, adoptLegacyData, userStorageKey } from './lib/storage';
 
 /** What the gate passes to the app. Without `user` the app runs in the original name-only mode. */
@@ -114,6 +115,19 @@ export const AuthGate: React.FC<{ AppComponent: React.ComponentType<AppShellProp
       );
     case 'in': {
       const { user } = auth;
+      // While the trip game is on, members of a trip group see only the game.
+      if (content.site.tripMode === true && user.tripGroup) {
+        return (
+          <JourneyApp
+            key={user.id}
+            user={user}
+            onLogout={async (name) => {
+              await logoutUser();
+              setAuth({ status: 'farewell', name });
+            }}
+          />
+        );
+      }
       return (
         <AppComponent
           key={user.id}

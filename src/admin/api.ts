@@ -119,3 +119,16 @@ export const deleteStaff = (id: string) => send<void>('DELETE', `/api/admin/staf
 
 export const listAudit = (limit = 50, offset = 0) =>
   get<{ items: AuditEntry[] }>(`/api/admin/audit?limit=${limit}&offset=${offset}`).then((r) => r.items);
+
+export interface TripAdmin {
+  group: string;
+  now: number;
+  opened: Record<string, number>;
+  stages: { id: string; title: string; subtitle: string; openedAt: number | null; done: number }[];
+  members: { id: string; rank: number; name: string; points: number; badges: number; stagesDone: number; everLoggedIn: boolean }[];
+  total: number;
+}
+
+export const fetchTrip = (group: string) => get<TripAdmin>(`/api/admin/trip?group=${group}`);
+export const openNextTripStage = (group: string) => send<TripAdmin>('POST', `/api/admin/trip/open?group=${group}`);
+export const undoTripStage = (group: string) => send<TripAdmin>('POST', `/api/admin/trip/undo?group=${group}`);

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
+  Bus,
   ChevronDown,
   BookOpen,
   CheckSquare,
@@ -34,6 +35,7 @@ import { DashboardPage } from './pages/Dashboard';
 import { MembersPage } from './pages/Members';
 import { StaffPage } from './pages/Staff';
 import { AuditPage } from './pages/Audit';
+import { TripPage } from './pages/Trip';
 import type { CollectionName } from '../types/content';
 
 export type Section =
@@ -42,6 +44,7 @@ export type Section =
   | 'staff'
   | 'settings'
   | 'audit'
+  | 'trip'
   | `content:${CollectionName}`;
 
 const CONTENT_ITEMS: { id: CollectionName; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -76,6 +79,7 @@ interface NavGroup {
 
 const NAV: NavGroup[] = [
   { title: '', items: [{ id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard }] },
+  { title: 'رویداد', items: [{ id: 'trip', label: 'کنترل سفر', icon: Bus, needs: 'trip.manage' }] },
   {
     title: 'محتوا',
     items: CONTENT_ITEMS.map((c) => ({ id: `content:${c.id}` as Section, label: c.label, icon: c.icon, needs: 'content.read' as Permission })),
@@ -186,6 +190,7 @@ export const AdminConsole: React.FC<{ onBackToApp: () => void }> = ({ onBackToAp
     if (section === 'dashboard') return <DashboardPage me={me!} go={go} collectionLabel={collectionLabel} />;
     if (section === 'members') return can('users.read') ? <MembersPage canWrite={can('users.write')} notify={notify} /> : <Denied />;
     if (section === 'staff') return can('staff.manage') ? <StaffPage me={me!} notify={notify} /> : <Denied />;
+    if (section === 'trip') return can('trip.manage') ? <TripPage notify={notify} /> : <Denied />;
     if (section === 'audit') return can('audit.read') ? <AuditPage /> : <Denied />;
     if (section === 'settings') {
       return (
