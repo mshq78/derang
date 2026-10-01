@@ -1,5 +1,8 @@
-import { accountSummary, importAccounts } from './accounts.js';
-import { login, logout, requireAdmin } from './auth.js';
+import { audit, listAudit } from './audit.js';
+import { AdminSession, login, logout, publicAdmin, require as requirePermission, requireAdmin } from './auth.js';
+import { dashboard } from './dashboard.js';
+import { createMember, deleteMember, importMembers, listMembers, updateMember } from './people.js';
+import { createStaff, deleteStaff, listStaff, updateStaff } from './staff.js';
 import {
   createItem,
   deleteItem,
@@ -61,14 +64,19 @@ export async function handle(request: Request): Promise<Response> {
 
     if (route[0] === 'login' && route.length === 1) {
       if (method !== 'POST') throw methodNotAllowed();
-      return json(await login(request, await readJson(request)));
+      const signedIn = await login(request, await readJson(request));
+      await audit(signedIn.admin.username, 'ورود به پنل مدیریت');
+      return json(signedIn);
     }
 
     const admin = await requireAdmin(request);
+    const need = (permission: Parameters<typeof requirePermission>[1]) => requirePermission(admin, permission);
+    // Changes made through the panel are recorded; reads and failed requests are not.
+    const writes = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
 
     switch (route[0]) {
       case 'me':
-        if (method === 'GET' && route.length === 1) return json({ admin });
+        if (method === 'GET' && route.length === 1) return json({ admin: publicAdmin(admin) });
         break;
 
       case 'logout':
@@ -78,29 +86,46 @@ export async function handle(request: Request): Promise<Response> {
         }
         break;
 
+      case 'dashboard':
+        if (method === 'GET' && route.length === 1) return json(await dashboard());
+        break;
+
       case 'content':
       case 'export':
+        need('content.read');
         if (method === 'GET' && route.length === 1) return json(await readBundle(false));
         break;
 
       case 'site':
         if (route.length !== 1) break;
-        if (method === 'GET') return json((await readBundle(false)).site);
-        if (method === 'PUT') return json(await updateSite(await readJson(request)));
+        if (method === 'GET') {
+          need('content.read');
+          return json((await readBundle(false)).site);
+        }
+        if (method === 'PUT') {
+          need('settings.write');
+          const site = await updateSite(await readJson(request));
+          await audit(admin, 'تنظیمات سایت ذخیره شد');
+          return json(site);
+        }
         break;
 
       case 'import':
         if (method === 'POST' && route.length === 1) {
+          need('settings.write');
           await writeBundle(await readJson(request), 'replace');
+          await audit(admin, 'محتوا از فایل پشتیبان بازیابی شد');
           return json({ ok: true });
         }
         break;
 
       case 'sms-config':
+        need('settings.write');
         if (method === 'GET' && route.length === 1) return json(smsStatus());
         break;
 
       case 'sms-test':
+        need('settings.write');
         if (method === 'POST' && route.length === 1) {
           const body = (await readJson(request)) as { phone?: unknown };
           const phone = typeof body?.phone === 'string' ? normalizeIranMobile(body.phone) : null;
@@ -115,26 +140,38 @@ export async function handle(request: Request): Promise<Response> {
         }
         break;
 
-      case 'accounts':
-        if (route.length === 1 && method === 'GET') return json(await accountSummary());
-        if (route.length === 2 && route[1] === 'import' && method === 'POST') {
-          return json(await importAccounts(await readJson(request)));
-        }
-        break;
-
       case 'media-config':
+        need('content.read');
         if (method === 'GET' && route.length === 1) return json({ access: blobAccess() });
         break;
 
       case 'blob-upload':
       case 'upload':
+        need('content.write');
         if (method === 'POST' && route.length === 1) {
           return json(await createUploadToken(request, await readJson(request)));
         }
         break;
 
       case 'collections':
-        return await collectionRoute(request, method, route.slice(1));
+        if (writes) need('content.write');
+        else need('content.read');
+        return await collectionRoute(request, method, route.slice(1), admin);
+
+      case 'users':
+        return await usersRoute(request, method, route.slice(1), admin);
+
+      case 'staff':
+        need('staff.manage');
+        return await staffRoute(request, method, route.slice(1), admin);
+
+      case 'audit':
+        need('audit.read');
+        if (method === 'GET' && route.length === 1) {
+          const params = new URL(request.url).searchParams;
+          return json({ items: await listAudit(Number(params.get('limit')) || 50, Number(params.get('offset')) || 0) });
+        }
+        break;
     }
 
     throw notFound();
@@ -164,12 +201,21 @@ async function authRoute(request: Request, method: string, route: string[]): Pro
   throw notFound();
 }
 
-async function collectionRoute(request: Request, method: string, route: string[]): Promise<Response> {
+async function collectionRoute(
+  request: Request,
+  method: string,
+  route: string[],
+  admin: AdminSession
+): Promise<Response> {
   const [collection, second] = route;
   if (!collection || !isCollection(collection) || route.length > 2) throw notFound('این بخش وجود ندارد.');
 
   if (route.length === 1) {
-    if (method === 'POST') return json(await createItem(collection, await readJson(request)), 201);
+    if (method === 'POST') {
+      const item = await createItem(collection, await readJson(request));
+      await audit(admin, 'مورد جدید ساخته شد', `${collection}/${item.id}`, titleOf(item));
+      return json(item, 201);
+    }
     if (method === 'GET') return json({ items: (await readBundle(false))[collection] });
     throw methodNotAllowed();
   }
@@ -181,13 +227,20 @@ async function collectionRoute(request: Request, method: string, route: string[]
     if (!Array.isArray(ids) || ids.length > 1000 || !ids.every(isValidId) || new Set(ids).size !== ids.length) {
       throw badRequest('فهرست ترتیب معتبر نیست.');
     }
-    return json({ items: await reorderCollection(collection, ids) });
+    const items = await reorderCollection(collection, ids);
+    await audit(admin, 'ترتیب موارد تغییر کرد', collection);
+    return json({ items });
   }
 
   if (!isValidId(second)) throw notFound('این مورد پیدا نشد.');
-  if (method === 'PUT') return json(await updateItem(collection, second, await readJson(request)));
+  if (method === 'PUT') {
+    const item = await updateItem(collection, second, await readJson(request));
+    await audit(admin, item.isPublished ? 'مورد ویرایش شد' : 'مورد ویرایش شد (پیش‌نویس)', `${collection}/${second}`, titleOf(item));
+    return json(item);
+  }
   if (method === 'DELETE') {
     await deleteItem(collection, second);
+    await audit(admin, 'مورد حذف شد', `${collection}/${second}`);
     return noContent();
   }
   throw methodNotAllowed();
@@ -195,4 +248,71 @@ async function collectionRoute(request: Request, method: string, route: string[]
 
 function methodNotAllowed() {
   return badRequest('این عملیات برای این مسیر مجاز نیست.', 'method_not_allowed');
+}
+
+const titleOf = (item: Record<string, unknown>): string => {
+  for (const key of ['title', 'name', 'question', 'text', 'label']) {
+    if (typeof item[key] === 'string' && item[key]) return String(item[key]).slice(0, 80);
+  }
+  return '';
+};
+
+async function usersRoute(request: Request, method: string, route: string[], admin: AdminSession): Promise<Response> {
+  const [first, second] = route;
+  if (method === 'GET' && route.length === 0) {
+    requirePermission(admin, 'users.read');
+    return json(await listMembers(new URL(request.url).searchParams));
+  }
+  requirePermission(admin, 'users.write');
+
+  if (first === 'import' && route.length === 1 && method === 'POST') {
+    const result = await importMembers(await readJson(request));
+    await audit(admin, 'ورود گروهی کاربران', '', `${result.created} جدید، ${result.updated} به‌روز، ${result.rejected.length} ردشده`);
+    return json(result);
+  }
+  if (route.length === 0 && method === 'POST') {
+    const member = await createMember(await readJson(request));
+    await audit(admin, 'کاربر ساخته شد', member.phone, `${member.firstName} ${member.lastName}`.trim());
+    return json(member, 201);
+  }
+  if (route.length === 1 && isValidId(first)) {
+    if (method === 'PUT') {
+      const body = (await readJson(request)) as Record<string, unknown>;
+      const member = await updateMember(first, body);
+      const what = body.disabled === true ? 'کاربر غیرفعال شد' : body.disabled === false ? 'کاربر فعال شد' : body.password ? 'رمز کاربر تغییر کرد' : 'کاربر ویرایش شد';
+      await audit(admin, what, member.phone, `${member.firstName} ${member.lastName}`.trim());
+      return json(member);
+    }
+    if (method === 'DELETE') {
+      const gone = await deleteMember(first);
+      await audit(admin, 'کاربر حذف شد', gone.phone);
+      return noContent();
+    }
+  }
+  void second;
+  throw notFound();
+}
+
+async function staffRoute(request: Request, method: string, route: string[], admin: AdminSession): Promise<Response> {
+  const [id] = route;
+  if (route.length === 0 && method === 'GET') return json(await listStaff());
+  if (route.length === 0 && method === 'POST') {
+    const created = await createStaff(await readJson(request));
+    await audit(admin, 'حساب مدیریتی ساخته شد', created.username, created.role);
+    return json(created, 201);
+  }
+  if (route.length === 1 && isValidId(id)) {
+    if (method === 'PUT') {
+      const body = (await readJson(request)) as Record<string, unknown>;
+      const updated = await updateStaff(id, body, admin);
+      await audit(admin, body.password ? 'رمز حساب مدیریتی تغییر کرد' : 'حساب مدیریتی ویرایش شد', updated.username, updated.role);
+      return json(updated);
+    }
+    if (method === 'DELETE') {
+      const gone = await deleteStaff(id, admin);
+      await audit(admin, 'حساب مدیریتی حذف شد', gone.username);
+      return noContent();
+    }
+  }
+  throw notFound();
 }

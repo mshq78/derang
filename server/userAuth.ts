@@ -1,7 +1,8 @@
-import { createHash, createHmac, randomBytes, randomInt, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import { normalizeIranMobile, toLatinDigits } from '../src/utils/phone.js';
 import { getDb } from './db.js';
 import { ApiError, badRequest, json, noContent } from './http.js';
+import { checkPassword } from './password.js';
 import { sendOtpSms, smsFailure, smsStatus } from './sms.js';
 
 /**
@@ -68,26 +69,6 @@ export function assertSameOrigin(request: Request): void {
 // Password sign-in for accounts the admin created in advance (username = mobile number)
 // ---------------------------------------------------------------------------
 
-const scryptAsync = (password: string, salt: Buffer): Promise<Buffer> =>
-  new Promise((resolve, reject) =>
-    scrypt(password, salt, 32, (err, key) => (err ? reject(err) : resolve(key)))
-  );
-
-/** Stored as s1$<salt>$<hash> (scrypt, base64url). */
-export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16);
-  const key = await scryptAsync(password, salt);
-  return `s1$${salt.toString('base64url')}$${key.toString('base64url')}`;
-}
-
-async function checkPassword(password: string, stored: string | null): Promise<boolean> {
-  const [version, saltPart, hashPart] = (stored ?? '').split('$');
-  const salt = Buffer.from(saltPart || 'x', 'base64url');
-  const expected = Buffer.from(hashPart || '', 'base64url');
-  const key = await scryptAsync(password, salt); // runs even for unknown users, to keep timing alike
-  return version === 's1' && expected.length === key.length && timingSafeEqual(expected, key);
-}
-
 const PASSWORD_WINDOW = "interval '15 minutes'";
 const MAX_FAILS_PER_ACCOUNT = 8;
 // One office or classroom shares an address, so the per-address cap is wide.
@@ -113,7 +94,7 @@ export async function passwordLogin(request: Request, body: unknown): Promise<Re
   }
 
   const [row] = await db.query(
-    'SELECT id, phone, first_name, last_name, password_hash FROM users WHERE phone = $1',
+    'SELECT id, phone, first_name, last_name, password_hash, disabled FROM users WHERE phone = $1',
     [phone]
   );
   const ok = await checkPassword(password, (row?.password_hash as string | null) ?? null);
@@ -121,6 +102,7 @@ export async function passwordLogin(request: Request, body: unknown): Promise<Re
     await db.query('INSERT INTO login_attempts (ip) VALUES ($1), ($2)', keys);
     throw wrong();
   }
+  if (row.disabled) throw new ApiError(403, 'account_disabled', 'این حساب غیرفعال شده است؛ با مدیر سامانه تماس بگیرید.');
 
   await db.query('DELETE FROM login_attempts WHERE ip = $1', [keys[0]]);
   await db.query('UPDATE users SET last_login_at = now() WHERE id = $1', [row.id]);
@@ -305,9 +287,10 @@ export async function verifyCode(request: Request, body: unknown): Promise<Respo
   const [row] = await db.query(
     `INSERT INTO users (id, phone, last_login_at) VALUES ($1, $2, now())
      ON CONFLICT (phone) DO UPDATE SET last_login_at = now()
-     RETURNING id, phone, first_name, last_name`,
+     RETURNING id, phone, first_name, last_name, disabled`,
     [randomUUID(), phone]
   );
+  if (row.disabled) throw new ApiError(403, 'account_disabled', 'این حساب غیرفعال شده است؛ با مدیر سامانه تماس بگیرید.');
   const user = toPublicUser(row);
 
   const token = randomBytes(32).toString('base64url');
@@ -333,7 +316,7 @@ export async function currentUser(request: Request): Promise<PublicUser | null> 
   const [row] = await getDb().query(
     `SELECT u.id, u.phone, u.first_name, u.last_name
      FROM user_sessions s JOIN users u ON u.id = s.user_id
-     WHERE s.token_hash = $1 AND s.expires_at > now()`,
+     WHERE s.token_hash = $1 AND s.expires_at > now() AND NOT u.disabled`,
     [sha256Hex(token)]
   );
   return row ? toPublicUser(row) : null;

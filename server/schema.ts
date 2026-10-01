@@ -67,6 +67,34 @@ const USER_SCHEMA: string[] = [
   `CREATE INDEX IF NOT EXISTS otp_codes_ip_idx ON otp_codes (ip, created_at)`,
 ];
 
+// Admin roles, the audit log and account switches; the probe index is created last.
+const ADMIN_SCHEMA: string[] = [
+  // Accounts created by the admin sign in with a password (see passwordLogin).
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text',
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled boolean NOT NULL DEFAULT false',
+  `CREATE TABLE IF NOT EXISTS staff_users (
+    id text PRIMARY KEY,
+    username text NOT NULL UNIQUE,
+    display_name text NOT NULL DEFAULT '',
+    role text NOT NULL,
+    password_hash text NOT NULL,
+    active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    last_login_at timestamptz
+  )`,
+  "ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'admin'",
+  'ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS staff_id text',
+  `CREATE TABLE IF NOT EXISTS audit_log (
+    id bigserial PRIMARY KEY,
+    at timestamptz NOT NULL DEFAULT now(),
+    actor text NOT NULL,
+    action text NOT NULL,
+    target text NOT NULL DEFAULT '',
+    detail text NOT NULL DEFAULT ''
+  )`,
+  'CREATE INDEX IF NOT EXISTS audit_log_at_idx ON audit_log (at DESC)',
+];
+
 let ready: Promise<void> | null = null;
 
 /**
@@ -104,8 +132,10 @@ async function init(): Promise<void> {
 
 /** One-off data fixes. Each only touches rows still holding the old value. */
 async function migrate(): Promise<void> {
-  // Accounts created by the admin sign in with a password (see passwordLogin).
-  await getDb().query('ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text');
+  const [probe] = await getDb().query(`SELECT to_regclass('public.audit_log_at_idx') AS done`);
+  if (!probe?.done) {
+    for (const statement of ADMIN_SCHEMA) await getDb().query(statement);
+  }
   // Brand name spelling changed from «دِرانْـگ» to «درنگ».
   await getDb().query(
     `UPDATE site_settings SET data = jsonb_set(data, '{brandName}', to_jsonb($2::text)), updated_at = now()
