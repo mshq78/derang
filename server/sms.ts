@@ -75,7 +75,14 @@ async function readBody(res: Response): Promise<{ text: string; json: unknown }>
   }
 }
 
-const shorten = (value: unknown) => String(value ?? '').slice(0, 200);
+const shorten = (value: unknown) => {
+  const text = String(value ?? '');
+  // A web page instead of an API answer means a firewall/CDN blocked the request.
+  if (/^\s*<(!doctype|html)/i.test(text)) {
+    return 'سامانه پیامکی درخواست را مسدود کرد (پاسخ صفحه‌ی وب به‌جای API؛ احتمالاً محدودیت IP خارج از ایران)';
+  }
+  return text.slice(0, 200);
+};
 
 async function sendKavenegar(phone: string, code: string): Promise<void> {
   const base = process.env.KAVENEGAR_BASE_URL || 'https://api.kavenegar.com';
