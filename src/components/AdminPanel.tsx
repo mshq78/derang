@@ -1101,8 +1101,10 @@ const CollectionList: React.FC<CollectionListProps> = ({
 const PhoneLoginCard: React.FC<{
   enabled: boolean;
   onToggle: (value: boolean) => void;
+  openAccess: boolean;
+  onToggleOpenAccess: (value: boolean) => void;
   isSandbox: boolean;
-}> = ({ enabled, onToggle, isSandbox }) => {
+}> = ({ enabled, onToggle, openAccess, onToggleOpenAccess, isSandbox }) => {
   const [status, setStatus] = useState<SmsStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [testPhone, setTestPhone] = useState('');
@@ -1139,6 +1141,23 @@ const PhoneLoginCard: React.FC<{
         <Lock className="h-4 w-4 text-primary" />
         <span>ورود و ثبت‌نام با شماره موبایل</span>
       </h3>
+
+      <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-warning/30 bg-warning-soft px-3.5 py-3">
+        <input
+          type="checkbox"
+          checked={openAccess}
+          onChange={(e) => onToggleOpenAccess(e.target.checked)}
+          className="mt-1 h-4 w-4 accent-primary"
+        />
+        <span>
+          <span className="block text-xs font-bold text-warning-ink">حالت بازدید آزاد (موقت): بدون هیچ ورودی</span>
+          <span className="block text-[13px] text-warning-ink leading-relaxed mt-0.5">
+            روشن: همه بدون وارد کردن نام یا شماره موبایل مستقیم وارد سایت می‌شوند؛ مثلاً برای وقتی که سامانه پیامکی
+            می‌خواهد محتوای سایت را برای تأیید پترن ببیند. پس از تأیید، آن را خاموش کنید. با «ذخیره» اعمال می‌شود و
+            برای بازدیدکنندگانی که قبلاً سایت را باز کرده‌اند تا حدود یک دقیقه بعد (با بازکردن دوباره‌ی صفحه) دیده می‌شود.
+          </span>
+        </span>
+      </label>
 
       <label className="flex items-start gap-3 cursor-pointer">
         <input
@@ -1419,6 +1438,8 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
       <PhoneLoginCard
         enabled={formData.phoneLoginEnabled === true}
         onToggle={(value) => handleChange('phoneLoginEnabled', value)}
+        openAccess={formData.openAccess === true}
+        onToggleOpenAccess={(value) => handleChange('openAccess', value)}
         isSandbox={isSandbox}
       />
 

@@ -14,6 +14,7 @@ export interface SiteSettings {
   introAudioTitle: string;     // title of the short intro audio on the home page
   introAudioUrl: string;       // empty = no intro audio
   phoneLoginEnabled: boolean;  // true = visitors must sign in with an SMS code
+  openAccess: boolean;         // true = no sign-in and no name screen at all (temporary review mode)
   onboardingTitle: string;
   onboardingSubtitle: string;
   farewellText: string;

@@ -223,6 +223,8 @@ function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps)
         screen: l.screen as Screen,
       }));
   }, [content.learningSteps]);
+  // Open-access mode skips the name screen; everyone is simply a guest.
+  const guestProfile: UserProfile = content.site.openAccess ? { first: 'مهمان', last: '' } : { first: '', last: '' };
   const [profile, setProfile] = useState<UserProfile>(() => {
     // A signed-in account's name comes from the server, not from local storage.
     if (user) return { first: user.firstName, last: user.lastName };
@@ -235,7 +237,7 @@ function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps)
     } catch {
       // ignore
     }
-    return { first: '', last: '' };
+    return guestProfile;
   });
 
   const [settings, setSettings] = useState<AppSettings>(() => {
@@ -368,7 +370,8 @@ function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps)
   useEffect(() => {
     try {
       const payload = {
-        profile,
+        // The automatic guest name is not a real account name; keep it out of storage.
+        profile: content.site.openAccess && !user ? { first: '', last: '' } : profile,
         settings,
         decisions,
         activeDecisionId,
@@ -873,7 +876,7 @@ function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps)
             return;
           }
           setFarewellName(profile.first);
-          setProfile({ first: '', last: '' });
+          setProfile(guestProfile);
           setScreen('farewell');
         }}
         brandName={content.site.brandName}

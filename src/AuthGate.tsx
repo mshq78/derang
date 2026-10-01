@@ -40,8 +40,8 @@ export const AuthGate: React.FC<{ AppComponent: React.ComponentType<AppShellProp
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (isReady && mode === null) setMode(content.site.phoneLoginEnabled === true ? 'phone' : 'legacy');
-  }, [isReady, mode, content.site.phoneLoginEnabled]);
+    if (isReady && mode === null) setMode(content.site.phoneLoginEnabled === true && content.site.openAccess !== true ? 'phone' : 'legacy');
+  }, [isReady, mode, content.site.phoneLoginEnabled, content.site.openAccess]);
 
   useEffect(() => {
     if (mode !== 'phone') return;

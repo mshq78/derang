@@ -12,6 +12,7 @@ export const DEFAULT_CONTENT: ContentBundle = {
     heroSubtitle:
       'چک‌لیست پرسش‌ها، دام‌های پنهان ذهن و مدل‌های ارزیابی ریسک برای سنجش هوشیارانه تصمیم‌های راهبردی',
     phoneLoginEnabled: false,
+    openAccess: false,
     introAudioTitle: 'معرفی صوتی درنگ',
     introAudioUrl:
       '/api/media/%D8%A7%D9%88%D9%84%20%D8%A7%D9%BE%D8%8C%20%D9%85%D8%B9%D8%B1%D9%81%DB%8C%20%D8%A7%D9%BE.mp3',
