@@ -2,8 +2,8 @@ import { ApiError } from './http.js';
 
 /**
  * Sends the one-time login code by SMS through the provider named in
- * SMS_PROVIDER. Supported: kavenegar, smsir, custom (any HTTP API) and
- * console (prints the code to the server log; refused in production).
+ * SMS_PROVIDER. Supported: kavenegar, smsir, ippanel, custom (any HTTP API)
+ * and console (prints the code to the server log; refused in production).
  */
 
 export class SmsError extends Error {}
@@ -19,6 +19,7 @@ export interface SmsStatus {
 const REQUIRED_ENV: Record<string, string[]> = {
   kavenegar: ['KAVENEGAR_API_KEY', 'KAVENEGAR_TEMPLATE'],
   smsir: ['SMSIR_API_KEY', 'SMSIR_TEMPLATE_ID'],
+  ippanel: ['IPPANEL_API_KEY', 'IPPANEL_PATTERN_CODE', 'IPPANEL_ORIGINATOR'],
   custom: ['SMS_HTTP_URL'],
   console: [],
 };
@@ -36,7 +37,12 @@ export function smsStatus(): SmsStatus {
   if (!provider) return { provider: null, configured: false, missing: ['SMS_PROVIDER'] };
   const required = REQUIRED_ENV[provider];
   if (!required) {
-    return { provider, configured: false, missing: ['SMS_PROVIDER (مقدار پشتیبانی‌نشده)'] };
+    // Never echo the value back: a mistyped SMS_PROVIDER may actually hold an API key.
+    return {
+      provider: 'unknown',
+      configured: false,
+      missing: [`SMS_PROVIDER باید یکی از ${Object.keys(REQUIRED_ENV).join(' / ')} باشد`],
+    };
   }
   if (provider === 'console' && !consoleAllowed()) {
     return { provider, configured: false, missing: ['حالت console روی سایت اصلی مجاز نیست'] };
@@ -113,6 +119,39 @@ async function sendSmsIr(phone: string, code: string): Promise<void> {
   }
 }
 
+/** +98912... from 0912..., +983000505 / 983000505 / 03000505 / 3000505 → +983000505 */
+function toInternational(value: string): string {
+  const v = value.replace(/[\s-]/g, '');
+  if (v.startsWith('+')) return v;
+  if (v.startsWith('98')) return `+${v}`;
+  if (v.startsWith('0')) return `+98${v.slice(1)}`;
+  return `+98${v}`;
+}
+
+/** IPPanel (Farazsms) REST v1: sends a pre-approved pattern whose variable holds the code. */
+async function sendIppanel(phone: string, code: string): Promise<void> {
+  const base = (process.env.IPPANEL_BASE_URL || 'https://api.ippanel.com/v1').replace(/\/+$/, '');
+  const res = await timedFetch(`${base}/messages/patterns/send`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `AccessKey ${process.env.IPPANEL_API_KEY}`,
+    },
+    body: JSON.stringify({
+      pattern_code: process.env.IPPANEL_PATTERN_CODE,
+      originator: toInternational(process.env.IPPANEL_ORIGINATOR!),
+      recipient: toInternational(phone),
+      values: { [process.env.IPPANEL_PARAM_NAME || 'verification-code']: code },
+    }),
+  });
+  const { text, json } = await readBody(res);
+  const result = json as { status?: string; code?: number; error_message?: string; message?: string } | null;
+  const accepted = res.ok && (result?.status === 'OK' || result?.code === 200);
+  if (!accepted) {
+    throw new SmsError(`IPPanel: ${shorten(result?.error_message || result?.message || text) || res.status}`);
+  }
+}
+
 type Escape = 'json' | 'url' | 'none';
 
 function fillTemplate(template: string, vars: Record<string, string>, escape: Escape): string {
@@ -184,6 +223,8 @@ export async function sendOtpSms(phone: string, code: string): Promise<void> {
       return sendKavenegar(phone, code);
     case 'smsir':
       return sendSmsIr(phone, code);
+    case 'ippanel':
+      return sendIppanel(phone, code);
     case 'custom':
       return sendCustom(phone, code);
     case 'console':

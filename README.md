@@ -78,6 +78,7 @@ VITE_API_BASE_URL=https://your-api-server.com
 | مقدار | متغیرهای لازم |
 | --- | --- |
 | `kavenegar` | `KAVENEGAR_API_KEY`، `KAVENEGAR_TEMPLATE` (قالب verify) |
+| `ippanel` | `IPPANEL_API_KEY`، `IPPANEL_PATTERN_CODE` (الگوی تأییدشده)، `IPPANEL_ORIGINATOR` (خط ارسال)، اختیاری `IPPANEL_PARAM_NAME` (پیش‌فرض `verification-code`) |
 | `smsir` | `SMSIR_API_KEY`، `SMSIR_TEMPLATE_ID`، اختیاری `SMSIR_PARAM_NAME` (پیش‌فرض `Code`) |
 | `custom` | `SMS_HTTP_URL` و معمولاً `SMS_HTTP_BODY`؛ برای هر سامانه‌ای با API وب (متغیرهای دیگر در `.env.example`) |
 | `console` | فقط برای آزمایش روی نسخه‌های پیش‌نمایش؛ کد در لاگ سرور چاپ می‌شود و روی سایت اصلی رد می‌شود |
