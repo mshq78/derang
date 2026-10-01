@@ -232,7 +232,7 @@ function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps)
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.profile) return parsed.profile;
+        if (parsed.profile?.first) return parsed.profile;
       }
     } catch {
       // ignore
@@ -365,6 +365,12 @@ function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps)
   const [newProblem, setNewProblem] = useState('');
   const [newWhy, setNewWhy] = useState('');
   const [activeQuestionHint, setActiveQuestionHint] = useState<'none' | 'help' | 'exercise'>('none');
+
+  // Open access turned on while a name-less profile is already loaded.
+  useEffect(() => {
+    if (content.site.openAccess && !user && !profile.first) setProfile(guestProfile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content.site.openAccess, user, profile.first]);
 
   // Persistence effect
   useEffect(() => {
@@ -789,8 +795,8 @@ function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps)
     );
   }
 
-  // Onboarding View
-  if (!profile.first) {
+  // Onboarding View (skipped in open-access mode, where everyone is a guest)
+  if (!profile.first && !content.site.openAccess) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas p-4 text-right">
         <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 sm:p-8 shadow-sm">
