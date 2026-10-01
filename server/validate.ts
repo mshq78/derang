@@ -268,6 +268,7 @@ export function cleanSite(input: unknown): SiteSettings {
   site.phoneLoginEnabled = site.phoneLoginEnabled === true;
   site.openAccess = site.openAccess === true;
   site.passwordLoginEnabled = site.passwordLoginEnabled === true;
+  site.tripMode = site.tripMode === true;
   if (typeof site.introAudioUrl === 'string') {
     site.introAudioUrl = normalizeMediaUrl(site.introAudioUrl.trim());
     if (!isSafeUrl(site.introAudioUrl)) {

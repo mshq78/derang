@@ -23,6 +23,11 @@ const cleanName = (value: unknown, max: number): string =>
     ? String(value).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max)
     : '';
 
+const cleanGroup = (value: unknown): string | null => {
+  const text = toLatinDigits(String(value ?? '')).trim();
+  return text === '1' || text === '2' ? text : null;
+};
+
 const cleanPassword = (value: unknown): string => toLatinDigits(String(value ?? '')).trim();
 
 function toMember(row: Record<string, unknown>) {
@@ -31,6 +36,7 @@ function toMember(row: Record<string, unknown>) {
     phone: row.phone as string,
     firstName: row.first_name as string,
     lastName: row.last_name as string,
+    tripGroup: (row.trip_group as string | null) ?? null,
     disabled: row.disabled === true,
     hasPassword: row.has_password === true,
     createdAt: new Date(row.created_at as string).toISOString(),
@@ -38,7 +44,7 @@ function toMember(row: Record<string, unknown>) {
   };
 }
 
-const MEMBER_COLUMNS = `id, phone, first_name, last_name, disabled, (password_hash IS NOT NULL) AS has_password,
+const MEMBER_COLUMNS = `id, phone, first_name, last_name, trip_group, disabled, (password_hash IS NOT NULL) AS has_password,
                         created_at, last_login_at`;
 
 export async function listMembers(params: URLSearchParams) {
@@ -57,6 +63,9 @@ export async function listMembers(params: URLSearchParams) {
   if (status === 'disabled') where.push('disabled');
   if (status === 'active') where.push('NOT disabled');
   if (status === 'no_password') where.push('password_hash IS NULL');
+  if (status === 'group1') where.push("trip_group = '1'");
+  if (status === 'group2') where.push("trip_group = '2'");
+  if (status === 'no_group') where.push('trip_group IS NULL');
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   const db = getDb();
@@ -81,9 +90,9 @@ export async function createMember(body: unknown) {
   const [existing] = await getDb().query('SELECT 1 AS ok FROM users WHERE phone = $1', [phone]);
   if (existing) throw conflict('کاربری با این شماره از قبل وجود دارد.');
   const [row] = await getDb().query(
-    `INSERT INTO users (id, phone, first_name, last_name, password_hash) VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO users (id, phone, first_name, last_name, password_hash, trip_group) VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING ${MEMBER_COLUMNS}`,
-    [randomUUID(), phone, firstName, cleanName(input.lastName, 50), await hashPassword(password)]
+    [randomUUID(), phone, firstName, cleanName(input.lastName, 50), await hashPassword(password), cleanGroup(input.tripGroup)]
   );
   return toMember(row);
 }
@@ -111,6 +120,7 @@ export async function updateMember(id: string, body: unknown) {
   }
   if (input.lastName !== undefined) push('last_name', cleanName(input.lastName, 50));
   if (input.disabled !== undefined) push('disabled', input.disabled === true);
+  if (input.tripGroup !== undefined) push('trip_group', cleanGroup(input.tripGroup));
   if (input.password !== undefined && input.password !== '') {
     const password = cleanPassword(input.password);
     if (!password || password.length > 128) throw badRequest('رمز عبور معتبر نیست.', 'validation');
@@ -143,7 +153,7 @@ export async function importMembers(body: unknown): Promise<ImportResult> {
 
   const result: ImportResult = { created: 0, updated: 0, rejected: [] };
   const seen = new Set<string>();
-  const rows: { id: string; phone: string; first_name: string; last_name: string; password_hash: string }[] = [];
+  const rows: { id: string; phone: string; first_name: string; last_name: string; password_hash: string; trip_group: string | null }[] = [];
 
   for (let index = 0; index < list.length; index++) {
     const item = (list[index] ?? {}) as Record<string, unknown>;
@@ -163,18 +173,20 @@ export async function importMembers(body: unknown): Promise<ImportResult> {
         first_name: firstName,
         last_name: cleanName(item.lastName, 50),
         password_hash: await hashPassword(password),
+        trip_group: cleanGroup(item.tripGroup),
       });
     }
   }
 
   if (rows.length > 0) {
     const written = await getDb().query(
-      `INSERT INTO users (id, phone, first_name, last_name, password_hash)
-       SELECT x.id, x.phone, x.first_name, x.last_name, x.password_hash
+      `INSERT INTO users (id, phone, first_name, last_name, password_hash, trip_group)
+       SELECT x.id, x.phone, x.first_name, x.last_name, x.password_hash, x.trip_group
        FROM jsonb_to_recordset($1::jsonb)
-         AS x(id text, phone text, first_name text, last_name text, password_hash text)
+         AS x(id text, phone text, first_name text, last_name text, password_hash text, trip_group text)
        ON CONFLICT (phone) DO UPDATE
-         SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, password_hash = EXCLUDED.password_hash
+         SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, password_hash = EXCLUDED.password_hash,
+             trip_group = COALESCE(EXCLUDED.trip_group, users.trip_group)
        RETURNING (xmax = 0) AS created, id`,
       [JSON.stringify(rows)]
     );

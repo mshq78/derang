@@ -11,7 +11,8 @@ export type Permission =
   | 'users.write'
   | 'staff.manage'
   | 'settings.write'
-  | 'audit.read';
+  | 'audit.read'
+  | 'trip.manage';
 
 export type Role = 'admin' | 'editor' | 'support' | 'viewer';
 
@@ -19,7 +20,7 @@ export const ROLES: Record<Role, { label: string; description: string; permissio
   admin: {
     label: 'مدیر کل',
     description: 'همه‌ی بخش‌ها: محتوا، کاربران، مدیران، تنظیمات و گزارش فعالیت',
-    permissions: ['content.read', 'content.write', 'users.read', 'users.write', 'staff.manage', 'settings.write', 'audit.read'],
+    permissions: ['content.read', 'content.write', 'users.read', 'users.write', 'staff.manage', 'settings.write', 'audit.read', 'trip.manage'],
   },
   editor: {
     label: 'تولیدکننده‌ی محتوا',

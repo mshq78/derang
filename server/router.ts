@@ -2,6 +2,7 @@ import { audit, listAudit } from './audit.js';
 import { AdminSession, login, logout, publicAdmin, require as requirePermission, requireAdmin } from './auth.js';
 import { dashboard } from './dashboard.js';
 import { createMember, deleteMember, importMembers, listMembers, updateMember } from './people.js';
+import { adminTrip, answerQuestion, completeTask, isGroup, openNextStage, submitTest, tripState, undoLastOpen } from './trip.js';
 import { createStaff, deleteStaff, listStaff, updateStaff } from './staff.js';
 import {
   createItem,
@@ -15,7 +16,7 @@ import {
 import { ApiError, badRequest, errorResponse, json, noContent, notFound, readJson } from './http.js';
 import { blobAccess, mediaRedirect } from './media.js';
 import { SmsError, sendOtpSms, smsStatus } from './sms.js';
-import { assertSameOrigin, currentUser, logout as userLogout, passwordLogin, requestCode, updateProfile, verifyCode } from './userAuth.js';
+import { assertSameOrigin, currentUser, requireUser, logout as userLogout, passwordLogin, requestCode, updateProfile, verifyCode } from './userAuth.js';
 import { normalizeIranMobile } from '../src/utils/phone.js';
 import { ensureReady } from './schema.js';
 import { createUploadToken } from './upload.js';
@@ -58,6 +59,7 @@ export async function handle(request: Request): Promise<Response> {
     }
 
     if (seg[0] === 'auth') return await authRoute(request, method, seg.slice(1));
+    if (seg[0] === 'trip') return await tripRoute(request, method, seg.slice(1));
 
     if (seg[0] !== 'admin') throw notFound();
     const route = seg.slice(1);
@@ -164,6 +166,10 @@ export async function handle(request: Request): Promise<Response> {
       case 'staff':
         need('staff.manage');
         return await staffRoute(request, method, route.slice(1), admin);
+
+      case 'trip':
+        need('trip.manage');
+        return await adminTripRoute(request, method, route.slice(1), admin);
 
       case 'audit':
         need('audit.read');
@@ -313,6 +319,35 @@ async function staffRoute(request: Request, method: string, route: string[], adm
       await audit(admin, 'حساب مدیریتی حذف شد', gone.username);
       return noContent();
     }
+  }
+  throw notFound();
+}
+
+async function tripRoute(request: Request, method: string, route: string[]): Promise<Response> {
+  const user = await requireUser(request);
+  if (route.length === 1 && route[0] === 'state' && method === 'GET') return json(await tripState(user));
+  if (method !== 'POST' || route.length !== 1) throw notFound();
+  assertSameOrigin(request);
+  const body = await readJson(request);
+  if (route[0] === 'complete') return json(await completeTask(user, body));
+  if (route[0] === 'answer') return json(await answerQuestion(user, body));
+  if (route[0] === 'test') return json(await submitTest(user, body));
+  throw notFound();
+}
+
+async function adminTripRoute(request: Request, method: string, route: string[], admin: AdminSession): Promise<Response> {
+  const group = new URL(request.url).searchParams.get('group') ?? '1';
+  if (!isGroup(group)) throw badRequest('گروه نامعتبر است.');
+  if (route.length === 0 && method === 'GET') return json(await adminTrip(group));
+  if (route.length === 1 && route[0] === 'open' && method === 'POST') {
+    const stage = await openNextStage(group);
+    await audit(admin, 'مرحله‌ی سفر باز شد', `گروه ${group}`, stage.title);
+    return json(await adminTrip(group));
+  }
+  if (route.length === 1 && route[0] === 'undo' && method === 'POST') {
+    const stage = await undoLastOpen(group);
+    await audit(admin, 'باز شدن مرحله‌ی سفر برگردانده شد', `گروه ${group}`, stage?.title ?? '');
+    return json(await adminTrip(group));
   }
   throw notFound();
 }

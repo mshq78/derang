@@ -29,6 +29,8 @@ export interface PublicUser {
   phone: string;
   firstName: string;
   lastName: string;
+  /** Trip group ('1' or '2') or null. */
+  tripGroup: string | null;
 }
 
 const sha256Hex = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -94,7 +96,7 @@ export async function passwordLogin(request: Request, body: unknown): Promise<Re
   }
 
   const [row] = await db.query(
-    'SELECT id, phone, first_name, last_name, password_hash, disabled FROM users WHERE phone = $1',
+    'SELECT id, phone, first_name, last_name, trip_group, password_hash, disabled FROM users WHERE phone = $1',
     [phone]
   );
   const ok = await checkPassword(password, (row?.password_hash as string | null) ?? null);
@@ -141,6 +143,7 @@ function toPublicUser(row: Record<string, unknown>): PublicUser {
     phone: row.phone as string,
     firstName: row.first_name as string,
     lastName: row.last_name as string,
+    tripGroup: (row.trip_group as string | null) ?? null,
   };
 }
 
@@ -287,7 +290,7 @@ export async function verifyCode(request: Request, body: unknown): Promise<Respo
   const [row] = await db.query(
     `INSERT INTO users (id, phone, last_login_at) VALUES ($1, $2, now())
      ON CONFLICT (phone) DO UPDATE SET last_login_at = now()
-     RETURNING id, phone, first_name, last_name, disabled`,
+     RETURNING id, phone, first_name, last_name, trip_group, disabled`,
     [randomUUID(), phone]
   );
   if (row.disabled) throw new ApiError(403, 'account_disabled', 'این حساب غیرفعال شده است؛ با مدیر سامانه تماس بگیرید.');
@@ -314,7 +317,7 @@ export async function currentUser(request: Request): Promise<PublicUser | null> 
   const token = readCookie(request, COOKIE_NAME);
   if (!token) return null;
   const [row] = await getDb().query(
-    `SELECT u.id, u.phone, u.first_name, u.last_name
+    `SELECT u.id, u.phone, u.first_name, u.last_name, u.trip_group
      FROM user_sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = $1 AND s.expires_at > now() AND NOT u.disabled`,
     [sha256Hex(token)]
@@ -340,7 +343,7 @@ export async function updateProfile(request: Request, body: unknown): Promise<Re
 
   const [row] = await getDb().query(
     `UPDATE users SET first_name = $2, last_name = $3 WHERE id = $1
-     RETURNING id, phone, first_name, last_name`,
+     RETURNING id, phone, first_name, last_name, trip_group`,
     [user.id, first, last]
   );
   return json({ user: toPublicUser(row) });

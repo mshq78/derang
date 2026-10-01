@@ -5,6 +5,8 @@ export interface AuthUser {
   phone: string;
   firstName: string;
   lastName: string;
+  /** '1' or '2' when the member belongs to a bus-trip group. */
+  tripGroup?: string | null;
 }
 
 export class AuthError extends Error {

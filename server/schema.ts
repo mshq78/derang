@@ -95,6 +95,25 @@ const ADMIN_SCHEMA: string[] = [
   'CREATE INDEX IF NOT EXISTS audit_log_at_idx ON audit_log (at DESC)',
 ];
 
+// The bus-trip game: which group a member belongs to, which stages are open, and what each member did.
+const TRIP_SCHEMA: string[] = [
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS trip_group text',
+  `CREATE TABLE IF NOT EXISTS trip_stage_opens (
+    group_name text NOT NULL,
+    stage_id text NOT NULL,
+    opened_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (group_name, stage_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS trip_progress (
+    user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    task_id text NOT NULL,
+    done_at timestamptz NOT NULL DEFAULT now(),
+    meta jsonb NOT NULL DEFAULT '{}'::jsonb,
+    PRIMARY KEY (user_id, task_id)
+  )`,
+  'CREATE INDEX IF NOT EXISTS trip_progress_done_idx ON trip_progress (done_at)',
+];
+
 let ready: Promise<void> | null = null;
 
 /**
@@ -135,6 +154,10 @@ async function migrate(): Promise<void> {
   const [probe] = await getDb().query(`SELECT to_regclass('public.audit_log_at_idx') AS done`);
   if (!probe?.done) {
     for (const statement of ADMIN_SCHEMA) await getDb().query(statement);
+  }
+  const [tripProbe] = await getDb().query(`SELECT to_regclass('public.trip_progress_done_idx') AS done`);
+  if (!tripProbe?.done) {
+    for (const statement of TRIP_SCHEMA) await getDb().query(statement);
   }
   // Brand name spelling changed from «دِرانْـگ» to «درنگ».
   await getDb().query(

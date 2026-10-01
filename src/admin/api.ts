@@ -7,7 +7,8 @@ export type Permission =
   | 'users.write'
   | 'staff.manage'
   | 'settings.write'
-  | 'audit.read';
+  | 'audit.read'
+  | 'trip.manage';
 
 export interface AdminIdentity {
   username: string;
@@ -21,6 +22,7 @@ export interface Member {
   phone: string;
   firstName: string;
   lastName: string;
+  tripGroup: string | null;
   disabled: boolean;
   hasPassword: boolean;
   createdAt: string;
@@ -84,6 +86,7 @@ export interface MemberInput {
   password: string;
   firstName: string;
   lastName: string;
+  tripGroup?: string | null;
 }
 
 const get = <T,>(path: string) => apiFetch<T>(path, { method: 'GET' }, true);

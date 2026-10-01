@@ -15,6 +15,7 @@ export interface SiteSettings {
   introAudioUrl: string;       // empty = no intro audio
   phoneLoginEnabled: boolean;  // true = visitors must sign in with an SMS code
   passwordLoginEnabled: boolean; // true = visitors sign in with a mobile number and password set by the admin
+  tripMode: boolean;           // true = members of a trip group see only the journey game
   openAccess: boolean;         // true = no sign-in and no name screen at all (temporary review mode)
   onboardingTitle: string;
   onboardingSubtitle: string;
