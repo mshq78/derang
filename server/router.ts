@@ -1,3 +1,4 @@
+import { accountSummary, importAccounts } from './accounts.js';
 import { login, logout, requireAdmin } from './auth.js';
 import {
   createItem,
@@ -111,6 +112,13 @@ export async function handle(request: Request): Promise<Response> {
             throw err;
           }
           return json({ ok: true });
+        }
+        break;
+
+      case 'accounts':
+        if (route.length === 1 && method === 'GET') return json(await accountSummary());
+        if (route.length === 2 && route[1] === 'import' && method === 'POST') {
+          return json(await importAccounts(await readJson(request)));
         }
         break;
 

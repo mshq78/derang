@@ -55,7 +55,14 @@ import {
 import { toPersianDigits } from '../utils/helpers';
 import { Modal } from './Modal';
 import { MediaField } from './MediaField';
-import { adminGetSmsStatus, adminSendTestSms, type SmsStatus } from '../lib/api';
+import {
+  adminGetAccountSummary,
+  adminGetSmsStatus,
+  adminImportAccounts,
+  adminSendTestSms,
+  type AccountRow,
+  type SmsStatus,
+} from '../lib/api';
 import { normalizeIranMobile } from '../utils/phone';
 
 interface AdminPanelProps {
@@ -1244,6 +1251,108 @@ const PhoneLoginCard: React.FC<{
   );
 };
 
+/** One account per line: mobile, password, first name, last name (comma, tab or semicolon; a header line is skipped). */
+function parseAccountLines(text: string): AccountRow[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\uFEFF/, '').split(/[,\t;،]/).map((cell) => cell.trim()))
+    .filter((cells) => cells.some(Boolean) && normalizeIranMobile(cells[0] || '') !== null)
+    .map(([phone, password, firstName, lastName]) => ({
+      phone,
+      password: password || '',
+      firstName: firstName || '',
+      lastName: lastName || '',
+    }));
+}
+
+const AccountsCard: React.FC = () => {
+  const [summary, setSummary] = useState<{ total: number; withPassword: number } | null>(null);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const refresh = useCallback(() => {
+    adminGetAccountSummary().then(setSummary).catch(() => setSummary(null));
+  }, []);
+  useEffect(refresh, [refresh]);
+
+  const run = async () => {
+    const rows = parseAccountLines(text);
+    if (rows.length === 0) {
+      setMessage({ ok: false, text: 'هیچ سطر معتبری پیدا نشد. هر سطر: شماره موبایل، رمز عبور، نام، نام خانوادگی.' });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    let created = 0;
+    let updated = 0;
+    const rejected: string[] = [];
+    try {
+      for (let i = 0; i < rows.length; i += 40) {
+        const res = await adminImportAccounts(rows.slice(i, i + 40));
+        created += res.created;
+        updated += res.updated;
+        res.rejected.forEach((r) => rejected.push(`سطر ${i + r.row}: ${r.reason}`));
+      }
+      setMessage({
+        ok: rejected.length === 0,
+        text: `${created} حساب ساخته و ${updated} حساب به‌روز شد.${rejected.length ? ' ردشده‌ها: ' + rejected.join('؛ ') : ''}`,
+      });
+      if (rejected.length === 0) setText('');
+    } catch (err: unknown) {
+      setMessage({ ok: false, text: `${err instanceof Error ? err.message : 'انجام نشد.'} (تا اینجا ${created} ساخته و ${updated} به‌روز شد)` });
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  };
+
+  return (
+    <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">
+      <h3 className="text-sm font-bold text-ink border-b border-line pb-2 flex items-center gap-2">
+        <Lock className="h-4 w-4 text-primary" />
+        <span>حساب‌های کاربری (ورود با رمز عبور)</span>
+      </h3>
+      <p className="text-[13px] text-ink-3 leading-relaxed">
+        {summary ? `${toPersianDigits(summary.withPassword)} حساب با رمز عبور از ${toPersianDigits(summary.total)} حساب ثبت‌شده. ` : ''}
+        هر سطر یک نفر: شماره موبایل، رمز عبور، نام، نام خانوادگی (با ویرگول یا تب جدا شود). اگر شماره از قبل باشد،
+        رمز و نام به‌روز می‌شود. رمزها فقط به‌صورت رمزنگاری‌شده ذخیره می‌شوند و بعداً قابل مشاهده نیستند.
+      </p>
+      <input
+        type="file"
+        accept=".csv,.txt,text/csv,text/plain"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file) setText(await file.text());
+          e.target.value = '';
+        }}
+        className="block w-full text-xs text-ink-2 file:ml-3 file:rounded-xl file:border file:border-line file:bg-surface-2 file:px-3 file:py-2 file:text-xs file:font-bold file:text-ink"
+      />
+      <textarea
+        dir="ltr"
+        rows={6}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={'09123456789,12345,علی,احمدی'}
+        className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+      />
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy || !text.trim()}
+        className="rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-surface hover:bg-primary-hover disabled:opacity-60"
+      >
+        {busy ? 'در حال ساخت حساب‌ها...' : 'ساخت یا به‌روزرسانی حساب‌ها'}
+      </button>
+      {message && (
+        <p role="status" className={`text-[13px] font-medium ${message.ok ? 'text-success-ink' : 'text-danger-ink'}`}>
+          {message.text}
+        </p>
+      )}
+    </div>
+  );
+};
+
 interface SiteSettingsEditorProps {
   settings: SiteSettings;
   onSave: (settings: SiteSettings) => Promise<void>;
@@ -1462,6 +1571,8 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
         onTogglePassword={(value) => handleChange('passwordLoginEnabled', value)}
         isSandbox={isSandbox}
       />
+
+      <AccountsCard />
 
       {/* Why Page Content */}
       <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">

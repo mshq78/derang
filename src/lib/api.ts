@@ -581,3 +581,24 @@ export const adminImportContent = async (
     true
   );
 };
+
+export interface AccountRow {
+  phone: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface AccountImportResult {
+  created: number;
+  updated: number;
+  rejected: { row: number; reason: string }[];
+}
+
+/** GET /api/admin/accounts: how many accounts exist and how many can sign in with a password. */
+export const adminGetAccountSummary = (): Promise<{ total: number; withPassword: number }> =>
+  apiFetch('/api/admin/accounts', { method: 'GET' }, true);
+
+/** POST /api/admin/accounts/import: creates or updates accounts (the server limits each request's size). */
+export const adminImportAccounts = (users: AccountRow[]): Promise<AccountImportResult> =>
+  apiFetch('/api/admin/accounts/import', { method: 'POST', body: JSON.stringify({ users }) }, true);
