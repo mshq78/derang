@@ -1103,8 +1103,10 @@ const PhoneLoginCard: React.FC<{
   onToggle: (value: boolean) => void;
   openAccess: boolean;
   onToggleOpenAccess: (value: boolean) => void;
+  passwordEnabled: boolean;
+  onTogglePassword: (value: boolean) => void;
   isSandbox: boolean;
-}> = ({ enabled, onToggle, openAccess, onToggleOpenAccess, isSandbox }) => {
+}> = ({ enabled, onToggle, openAccess, onToggleOpenAccess, passwordEnabled, onTogglePassword, isSandbox }) => {
   const [status, setStatus] = useState<SmsStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [testPhone, setTestPhone] = useState('');
@@ -1155,6 +1157,22 @@ const PhoneLoginCard: React.FC<{
             روشن: همه بدون وارد کردن نام یا شماره موبایل مستقیم وارد سایت می‌شوند؛ مثلاً برای وقتی که سامانه پیامکی
             می‌خواهد محتوای سایت را برای تأیید پترن ببیند. پس از تأیید، آن را خاموش کنید. با «ذخیره» اعمال می‌شود و
             برای بازدیدکنندگانی که قبلاً سایت را باز کرده‌اند تا حدود یک دقیقه بعد (با بازکردن دوباره‌ی صفحه) دیده می‌شود.
+          </span>
+        </span>
+      </label>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={passwordEnabled}
+          onChange={(e) => onTogglePassword(e.target.checked)}
+          className="mt-1 h-4 w-4 accent-primary"
+        />
+        <span>
+          <span className="block text-xs font-bold text-ink">ورود با نام کاربری (شماره موبایل) و رمز عبور</span>
+          <span className="block text-[13px] text-ink-3 leading-relaxed mt-0.5">
+            فقط کاربرانی که از قبل برایشان حساب ساخته شده می‌توانند وارد شوند. نیازی به سامانه پیامکی ندارد.
+            با «ذخیره» اعمال می‌شود.
           </span>
         </span>
       </label>
@@ -1440,6 +1458,8 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
         onToggle={(value) => handleChange('phoneLoginEnabled', value)}
         openAccess={formData.openAccess === true}
         onToggleOpenAccess={(value) => handleChange('openAccess', value)}
+        passwordEnabled={formData.passwordLoginEnabled === true}
+        onTogglePassword={(value) => handleChange('passwordLoginEnabled', value)}
         isSandbox={isSandbox}
       />
 

@@ -40,8 +40,13 @@ export const AuthGate: React.FC<{ AppComponent: React.ComponentType<AppShellProp
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (isReady && mode === null) setMode(content.site.phoneLoginEnabled === true && content.site.openAccess !== true ? 'phone' : 'legacy');
-  }, [isReady, mode, content.site.phoneLoginEnabled, content.site.openAccess]);
+    if (isReady && mode === null) setMode(
+        (content.site.phoneLoginEnabled === true || content.site.passwordLoginEnabled === true) &&
+          content.site.openAccess !== true
+          ? 'phone'
+          : 'legacy'
+      );
+  }, [isReady, mode, content.site.phoneLoginEnabled, content.site.passwordLoginEnabled, content.site.openAccess]);
 
   useEffect(() => {
     if (mode !== 'phone') return;
@@ -90,6 +95,8 @@ export const AuthGate: React.FC<{ AppComponent: React.ComponentType<AppShellProp
         <LoginScreen
           brandName={content.site.brandName}
           orgName={content.site.orgName}
+          smsEnabled={content.site.phoneLoginEnabled === true}
+          passwordEnabled={content.site.passwordLoginEnabled === true}
           onDone={(user) => {
             adoptLegacyData(user.id);
             setAuth({ status: 'in', user });

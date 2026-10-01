@@ -11,7 +11,7 @@ import {
 import { ApiError, badRequest, errorResponse, json, noContent, notFound, readJson } from './http.js';
 import { blobAccess, mediaRedirect } from './media.js';
 import { SmsError, sendOtpSms, smsStatus } from './sms.js';
-import { assertSameOrigin, currentUser, logout as userLogout, requestCode, updateProfile, verifyCode } from './userAuth.js';
+import { assertSameOrigin, currentUser, logout as userLogout, passwordLogin, requestCode, updateProfile, verifyCode } from './userAuth.js';
 import { normalizeIranMobile } from '../src/utils/phone.js';
 import { ensureReady } from './schema.js';
 import { createUploadToken } from './upload.js';
@@ -150,6 +150,7 @@ async function authRoute(request: Request, method: string, route: string[]): Pro
 
   if (action === 'request-code' && method === 'POST') return requestCode(request, await readJson(request));
   if (action === 'verify-code' && method === 'POST') return verifyCode(request, await readJson(request));
+  if (action === 'login' && method === 'POST') return passwordLogin(request, await readJson(request));
   if (action === 'profile' && method === 'PUT') return updateProfile(request, await readJson(request));
   if (action === 'logout' && method === 'POST') return userLogout(request);
   throw notFound();

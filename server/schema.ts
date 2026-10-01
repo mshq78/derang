@@ -104,6 +104,8 @@ async function init(): Promise<void> {
 
 /** One-off data fixes. Each only touches rows still holding the old value. */
 async function migrate(): Promise<void> {
+  // Accounts created by the admin sign in with a password (see passwordLogin).
+  await getDb().query('ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text');
   // Brand name spelling changed from «دِرانْـگ» to «درنگ».
   await getDb().query(
     `UPDATE site_settings SET data = jsonb_set(data, '{brandName}', to_jsonb($2::text)), updated_at = now()

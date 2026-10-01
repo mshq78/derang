@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import {
   AuthError,
   AuthUser,
+  loginWithPassword,
   requestLoginCode,
   saveUserProfile,
   verifyLoginCode,
@@ -13,10 +14,13 @@ import { maskPhone, normalizeIranMobile, toLatinDigits } from '../utils/phone';
 interface LoginScreenProps {
   brandName: string;
   orgName: string;
+  /** Which sign-in methods are open; password is shown first when both are. */
+  smsEnabled: boolean;
+  passwordEnabled: boolean;
   onDone: (user: AuthUser) => void;
 }
 
-type Step = 'phone' | 'code' | 'profile';
+type Step = 'password' | 'phone' | 'code' | 'profile';
 
 const CODE_LENGTH = 6;
 
@@ -25,8 +29,9 @@ const inputClass =
 const primaryButton =
   'flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-surface shadow-sm hover:bg-primary-hover active:scale-[0.99] disabled:opacity-60 disabled:pointer-events-none transition-all';
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ brandName, orgName, onDone }) => {
-  const [step, setStep] = useState<Step>('phone');
+export const LoginScreen: React.FC<LoginScreenProps> = ({ brandName, orgName, smsEnabled, passwordEnabled, onDone }) => {
+  const [step, setStep] = useState<Step>(passwordEnabled ? 'password' : 'phone');
+  const [password, setPassword] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -66,6 +71,30 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ brandName, orgName, on
         setStep('code');
       }
       setError(err instanceof Error ? err.message : 'خطای ناشناخته');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phoneInput.trim() || !password) {
+      setError('نام کاربری و رمز عبور را وارد کنید.');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const verified = await loginWithPassword(phoneInput, password);
+      if (verified.firstName) {
+        onDone(verified);
+      } else {
+        setUser(verified);
+        setStep('profile');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'خطای ناشناخته');
+      setPassword('');
     } finally {
       setLoading(false);
     }
@@ -139,6 +168,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ brandName, orgName, on
             {step === 'profile' ? 'نام خود را بگویید' : `ورود یا ثبت‌نام در ${brandName}`}
           </h1>
           <p className="mt-2 max-w-sm text-sm leading-relaxed text-ink-2">
+            {step === 'password' && 'نام کاربری (شماره موبایل) و رمز عبور خود را وارد کنید.'}
             {step === 'phone' && 'شماره موبایل خود را وارد کنید تا کد تأیید برایتان پیامک شود.'}
             {step === 'code' && (
               <>
@@ -153,6 +183,60 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ brandName, orgName, on
             {step === 'profile' && 'شماره شما تأیید شد. برای شخصی‌سازی گزارش‌ها، نام خود را وارد کنید.'}
           </p>
         </div>
+
+        {step === 'password' && (
+          <form onSubmit={handlePasswordSubmit} className="space-y-4" noValidate>
+            <div>
+              <label htmlFor="username" className="mb-1.5 block text-xs font-bold text-ink">
+                نام کاربری (شماره موبایل)
+              </label>
+              <input
+                id="username"
+                ref={mainInputRef}
+                type="tel"
+                inputMode="tel"
+                autoComplete="username"
+                dir="ltr"
+                maxLength={20}
+                placeholder="09123456789"
+                value={phoneInput}
+                onChange={(e) => setPhoneInput(e.target.value)}
+                className={`${inputClass} text-left tracking-wider`}
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="mb-1.5 block text-xs font-bold text-ink">
+                رمز عبور (شماره پرسنلی)
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                dir="ltr"
+                maxLength={128}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={`${inputClass} text-left`}
+              />
+            </div>
+            <button type="submit" disabled={loading} className={primaryButton}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
+              <span>ورود</span>
+            </button>
+            {smsEnabled && (
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setStep('phone');
+                }}
+                className="w-full text-center text-xs font-semibold text-primary hover:text-primary-hover"
+              >
+                ورود با کد پیامکی
+              </button>
+            )}
+          </form>
+        )}
 
         {step === 'phone' && (
           <form onSubmit={handlePhoneSubmit} className="space-y-4" noValidate>
@@ -178,6 +262,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ brandName, orgName, on
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
               <span>دریافت کد تأیید</span>
             </button>
+            {passwordEnabled && (
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setStep('password');
+                }}
+                className="w-full text-center text-xs font-semibold text-primary hover:text-primary-hover"
+              >
+                ورود با رمز عبور
+              </button>
+            )}
           </form>
         )}
 

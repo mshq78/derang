@@ -82,6 +82,12 @@ export const verifyLoginCode = (phone: string, code: string) =>
     body: JSON.stringify({ phone, code }),
   }).then((res) => res.user);
 
+export const loginWithPassword = (username: string, password: string) =>
+  authFetch<{ user: AuthUser }>('login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  }).then((res) => res.user);
+
 export const saveUserProfile = (firstName: string, lastName: string) =>
   authFetch<{ user: AuthUser }>('profile', {
     method: 'PUT',
