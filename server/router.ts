@@ -8,8 +8,11 @@ import {
   updateSite,
   writeBundle,
 } from './content.js';
-import { badRequest, errorResponse, json, noContent, notFound, readJson } from './http.js';
+import { ApiError, badRequest, errorResponse, json, noContent, notFound, readJson } from './http.js';
 import { blobAccess, mediaRedirect } from './media.js';
+import { SmsError, sendOtpSms, smsStatus } from './sms.js';
+import { assertSameOrigin, currentUser, logout as userLogout, requestCode, updateProfile, verifyCode } from './userAuth.js';
+import { normalizeIranMobile } from '../src/utils/phone.js';
 import { ensureReady } from './schema.js';
 import { createUploadToken } from './upload.js';
 import { isCollection, isValidId } from './validate.js';
@@ -49,6 +52,8 @@ export async function handle(request: Request): Promise<Response> {
     if (seg.length === 1 && seg[0] === 'content' && method === 'GET') {
       return json(await readBundle(true), 200, PUBLIC_CACHE);
     }
+
+    if (seg[0] === 'auth') return await authRoute(request, method, seg.slice(1));
 
     if (seg[0] !== 'admin') throw notFound();
     const route = seg.slice(1);
@@ -90,6 +95,25 @@ export async function handle(request: Request): Promise<Response> {
         }
         break;
 
+      case 'sms-config':
+        if (method === 'GET' && route.length === 1) return json(smsStatus());
+        break;
+
+      case 'sms-test':
+        if (method === 'POST' && route.length === 1) {
+          const body = (await readJson(request)) as { phone?: unknown };
+          const phone = typeof body?.phone === 'string' ? normalizeIranMobile(body.phone) : null;
+          if (!phone) throw badRequest('شماره موبایل معتبر نیست.');
+          try {
+            await sendOtpSms(phone, '123456');
+          } catch (err) {
+            if (err instanceof SmsError) throw new ApiError(502, 'sms_failed', err.message);
+            throw err;
+          }
+          return json({ ok: true });
+        }
+        break;
+
       case 'media-config':
         if (method === 'GET' && route.length === 1) return json({ access: blobAccess() });
         break;
@@ -109,6 +133,26 @@ export async function handle(request: Request): Promise<Response> {
   } catch (err) {
     return errorResponse(err);
   }
+}
+
+async function authRoute(request: Request, method: string, route: string[]): Promise<Response> {
+  if (route.length !== 1) throw notFound();
+  const action = route[0];
+
+  if (action === 'me' && method === 'GET') {
+    const user = await currentUser(request);
+    if (!user) throw new ApiError(401, 'unauthorized', 'وارد نشده‌اید.');
+    return json({ user });
+  }
+
+  if (method !== 'POST' && method !== 'PUT') throw methodNotAllowed();
+  assertSameOrigin(request);
+
+  if (action === 'request-code' && method === 'POST') return requestCode(request, await readJson(request));
+  if (action === 'verify-code' && method === 'POST') return verifyCode(request, await readJson(request));
+  if (action === 'profile' && method === 'PUT') return updateProfile(request, await readJson(request));
+  if (action === 'logout' && method === 'POST') return userLogout(request);
+  throw notFound();
 }
 
 async function collectionRoute(request: Request, method: string, route: string[]): Promise<Response> {

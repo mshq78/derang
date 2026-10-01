@@ -62,6 +62,9 @@ import {
 } from './utils/jalali';
 import { playSoundEffect } from './utils/audioEffects';
 import { ContentProvider, useContent } from './context/ContentContext';
+import { AuthGate } from './AuthGate';
+import type { AppShellProps } from './AuthGate';
+import { FarewellScreen } from './components/FarewellScreen';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { ArchetypeCard } from './components/ArchetypeCard';
@@ -74,7 +77,6 @@ import { HelpModal } from './components/HelpModal';
 import { Confetti } from './components/Confetti';
 import { EditDecisionModal } from './components/EditDecisionModal';
 
-const STORAGE_KEY = 'gera_dorang_unified_v2';
 
 const DEFAULT_SETTINGS: AppSettings = {
   font: 1,
@@ -86,7 +88,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'light',
 };
 
-function DerangApp() {
+function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps) {
   const { content } = useContent();
 
   // Dynamic content mapping - published items only, sorted by sortOrder
@@ -222,8 +224,10 @@ function DerangApp() {
       }));
   }, [content.learningSteps]);
   const [profile, setProfile] = useState<UserProfile>(() => {
+    // A signed-in account's name comes from the server, not from local storage.
+    if (user) return { first: user.firstName, last: user.lastName };
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.profile) return parsed.profile;
@@ -236,7 +240,7 @@ function DerangApp() {
 
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.settings) return { ...DEFAULT_SETTINGS, ...parsed.settings, theme: parsed.settings.theme || 'light' };
@@ -249,7 +253,7 @@ function DerangApp() {
 
   const [decisions, setDecisions] = useState<DecisionRecord[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.decisions)) return parsed.decisions;
@@ -262,7 +266,7 @@ function DerangApp() {
 
   const [activeDecisionId, setActiveDecisionId] = useState<string | null>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.activeDecisionId) return parsed.activeDecisionId;
@@ -275,7 +279,7 @@ function DerangApp() {
 
   const [learningDone, setLearningDone] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.learningDone)) return parsed.learningDone;
@@ -288,7 +292,7 @@ function DerangApp() {
 
   const [unlockedArchetypes, setUnlockedArchetypes] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.unlockedArchetypes) && parsed.unlockedArchetypes.length > 0) {
@@ -303,7 +307,7 @@ function DerangApp() {
 
   const [challengeCorrectCount, setChallengeCorrectCount] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (typeof parsed.challengeCorrectCount === 'number') return parsed.challengeCorrectCount;
@@ -316,7 +320,7 @@ function DerangApp() {
 
   const [answeredChallenges, setAnsweredChallenges] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed.answeredChallenges)) return parsed.answeredChallenges;
@@ -373,7 +377,7 @@ function DerangApp() {
         challengeCorrectCount,
         answeredChallenges,
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch {
       // Storage unavailable
     }
@@ -700,7 +704,7 @@ function DerangApp() {
 
   const handleClearAllData = () => {
     if (window.confirm('آیا از حذف تمام پرونده‌ها و پیشرفت یادگیری مطمئن هستید؟ این عمل برگشت‌ناپذیر است.')) {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(storageKey);
       setDecisions([]);
       setActiveDecisionId(null);
       setLearningDone([]);
@@ -767,33 +771,18 @@ function DerangApp() {
     filteredBookQA.length > 0 ||
     filteredChallenges.length > 0;
 
-  // Farewell View
+  // Farewell View (name-only mode; with phone sign-in the gate shows its own)
   if (screen === 'farewell') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas p-4 text-right">
-        <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 sm:p-8 text-center shadow-sm">
-          <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-2xl bg-success-soft text-success font-bold text-2xl mb-4 border border-success/20">
-            ✓
-          </div>
-          <h2 className="text-xl font-bold text-ink">
-            {farewellName ? `${farewellName} عزیز، ` : ''}سپاس از درنگ هوشیارانه امروز شما
-          </h2>
-          <p className="mt-2 text-sm text-ink-2 leading-relaxed">
-            {content.site.farewellText}
-          </p>
-          <div className="mt-6 flex flex-col gap-2">
-            <button
-              onClick={() => {
-                setFarewellName('');
-                handleNavigate('home');
-              }}
-              className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-surface shadow-sm hover:bg-primary-hover transition-all"
-            >
-              ورود دوباره
-            </button>
-          </div>
-        </div>
-      </div>
+      <FarewellScreen
+        name={farewellName}
+        text={content.site.farewellText}
+        buttonLabel="ورود دوباره"
+        onContinue={() => {
+          setFarewellName('');
+          handleNavigate('home');
+        }}
+      />
     );
   }
 
@@ -875,8 +864,15 @@ function DerangApp() {
         onOpenSettings={() => setActiveModal('settings')}
         onExit={() => {
           playSoundEffect('exit', settings.sound, settings.fxVolume);
-          setFarewellName(profile.first);
           setActiveModal('none');
+          if (onLogout) {
+            // Signed-in account: end the server session; stay put if that fails.
+            onLogout(profile.first).catch((err: unknown) =>
+              showToast(err instanceof Error ? err.message : 'خروج انجام نشد؛ دوباره تلاش کنید.')
+            );
+            return;
+          }
+          setFarewellName(profile.first);
           setProfile({ first: '', last: '' });
           setScreen('farewell');
         }}
@@ -2979,7 +2975,20 @@ function DerangApp() {
           settings={settings}
           profile={profile}
           onUpdateSettings={(newSettings) => setSettings((prev) => ({ ...prev, ...newSettings }))}
-          onUpdateProfile={(newProfile) => setProfile(newProfile)}
+          phone={user?.phone}
+          onUpdateProfile={(newProfile) => {
+            if (!onSaveProfile) {
+              setProfile(newProfile);
+              return;
+            }
+            // Account name: show it at once, restore it if the server refuses.
+            const previous = profile;
+            setProfile(newProfile);
+            onSaveProfile(newProfile.first, newProfile.last).catch((err: unknown) => {
+              setProfile(previous);
+              showToast(err instanceof Error ? err.message : 'نام ذخیره نشد.');
+            });
+          }}
           onClose={() => setActiveModal('none')}
           onOpenTour={() => setActiveModal('tour')}
           onBackup={handleBackupDownload}
@@ -3032,7 +3041,7 @@ function DerangApp() {
 export default function App() {
   return (
     <ContentProvider>
-      <DerangApp />
+      <AuthGate AppComponent={DerangApp} />
     </ContentProvider>
   );
 }

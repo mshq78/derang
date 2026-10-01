@@ -67,6 +67,16 @@ export const getCachedContent = (): ContentBundle => {
   return DEFAULT_CONTENT;
 };
 
+export const hasCachedContent = (): boolean => {
+  try {
+    const raw = localStorage.getItem(PUBLIC_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return !!(parsed && parsed.site && Array.isArray(parsed.stations));
+  } catch {
+    return false;
+  }
+};
+
 export const setCachedContent = (bundle: ContentBundle): void => {
   try {
     localStorage.setItem(PUBLIC_CACHE_KEY, JSON.stringify(bundle));
@@ -525,6 +535,28 @@ export const adminUploadMedia = (
       }
       throw new Error(message ? `بارگذاری فایل انجام نشد: ${message}` : 'بارگذاری فایل انجام نشد.');
     });
+};
+
+export interface SmsStatus {
+  provider: string | null;
+  configured: boolean;
+  missing: string[];
+}
+
+/** GET /api/admin/sms-config: whether the SMS provider is connected on the server. */
+export const adminGetSmsStatus = async (isSandbox = false): Promise<SmsStatus> => {
+  if (import.meta.env.DEV && isSandbox) return { provider: 'console', configured: true, missing: [] };
+  return await apiFetch<SmsStatus>('/api/admin/sms-config', { method: 'GET' }, true);
+};
+
+/** POST /api/admin/sms-test: sends a sample verification SMS to the given number. */
+export const adminSendTestSms = async (phone: string, isSandbox = false): Promise<void> => {
+  if (import.meta.env.DEV && isSandbox) return;
+  await apiFetch<{ ok: boolean }>(
+    '/api/admin/sms-test',
+    { method: 'POST', body: JSON.stringify({ phone }) },
+    true
+  );
 };
 
 /**

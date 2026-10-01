@@ -55,6 +55,8 @@ import {
 import { toPersianDigits } from '../utils/helpers';
 import { Modal } from './Modal';
 import { MediaField } from './MediaField';
+import { adminGetSmsStatus, adminSendTestSms, type SmsStatus } from '../lib/api';
+import { normalizeIranMobile } from '../utils/phone';
 
 interface AdminPanelProps {
   onBackToApp: () => void;
@@ -1096,6 +1098,115 @@ const CollectionList: React.FC<CollectionListProps> = ({
 // --------------------------------------------------------------------------
 // Site Settings Editor Component
 // --------------------------------------------------------------------------
+const PhoneLoginCard: React.FC<{
+  enabled: boolean;
+  onToggle: (value: boolean) => void;
+  isSandbox: boolean;
+}> = ({ enabled, onToggle, isSandbox }) => {
+  const [status, setStatus] = useState<SmsStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [testPhone, setTestPhone] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    adminGetSmsStatus(isSandbox)
+      .then(setStatus)
+      .catch((err: unknown) => setStatusError(err instanceof Error ? err.message : 'وضعیت دریافت نشد.'));
+  }, [isSandbox]);
+
+  const sendTest = async () => {
+    const phone = normalizeIranMobile(testPhone);
+    if (!phone) {
+      setTestResult({ ok: false, text: 'شماره موبایل معتبر نیست.' });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      await adminSendTestSms(phone, isSandbox);
+      setTestResult({ ok: true, text: 'پیامک آزمایشی ارسال شد. اگر رسید، اتصال درست است.' });
+    } catch (err: unknown) {
+      setTestResult({ ok: false, text: err instanceof Error ? err.message : 'ارسال انجام نشد.' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">
+      <h3 className="text-sm font-bold text-ink border-b border-line pb-2 flex items-center gap-2">
+        <Lock className="h-4 w-4 text-primary" />
+        <span>ورود و ثبت‌نام با شماره موبایل</span>
+      </h3>
+
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="mt-1 h-4 w-4 accent-primary"
+        />
+        <span>
+          <span className="block text-xs font-bold text-ink">ورود با کد پیامکی برای همه بازدیدکنندگان اجباری باشد</span>
+          <span className="block text-[13px] text-ink-3 leading-relaxed mt-0.5">
+            خاموش: سایت مثل قبل فقط نام را می‌پرسد. روشن: کاربر باید شماره موبایلش را با کد پیامکی تأیید کند.
+            پس از تغییر، «ذخیره» را بزنید. این گزینه فقط وقتی روشن می‌شود که سامانه پیامکی روی سرور وصل باشد.
+          </span>
+        </span>
+      </label>
+
+      <div
+        className={`rounded-xl border px-3.5 py-2.5 text-[13px] font-medium ${
+          status?.configured ? 'border-success/30 bg-success-soft text-success-ink' : 'border-warning/30 bg-warning-soft text-warning-ink'
+        }`}
+      >
+        {statusError && <span>{statusError}</span>}
+        {!statusError && !status && <span>در حال بررسی اتصال سامانه پیامکی...</span>}
+        {status?.configured && <span>سامانه پیامکی وصل است (سرویس: {status.provider}).</span>}
+        {status && !status.configured && (
+          <span>
+            سامانه پیامکی هنوز وصل نیست. این متغیرها در تنظیمات پروژه Vercel کم است:{' '}
+            <span dir="ltr" className="font-mono">{status.missing.join(', ')}</span>
+          </span>
+        )}
+      </div>
+
+      {status?.configured && (
+        <div>
+          <label className="block text-xs font-bold text-ink-2 mb-1">ارسال پیامک آزمایشی</label>
+          <div className="flex gap-2">
+            <input
+              type="tel"
+              dir="ltr"
+              placeholder="09123456789"
+              value={testPhone}
+              onChange={(e) => setTestPhone(e.target.value)}
+              className="min-w-0 flex-1 rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
+            />
+            <button
+              type="button"
+              onClick={sendTest}
+              disabled={testing}
+              className="flex-shrink-0 rounded-xl border border-line bg-surface-2 px-4 py-2 text-xs font-bold text-ink hover:bg-surface disabled:opacity-60"
+            >
+              {testing ? 'در حال ارسال...' : 'ارسال'}
+            </button>
+          </div>
+          {testResult && (
+            <p
+              role="status"
+              className={`mt-1.5 text-[13px] font-medium ${testResult.ok ? 'text-success-ink' : 'text-danger-ink'}`}
+            >
+              {testResult.text}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface SiteSettingsEditorProps {
   settings: SiteSettings;
   onSave: (settings: SiteSettings) => Promise<void>;
@@ -1304,6 +1415,12 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
           />
         </div>
       </div>
+
+      <PhoneLoginCard
+        enabled={formData.phoneLoginEnabled === true}
+        onToggle={(value) => handleChange('phoneLoginEnabled', value)}
+        isSandbox={isSandbox}
+      />
 
       {/* Why Page Content */}
       <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">

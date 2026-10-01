@@ -2,7 +2,9 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
-    message: string
+    message: string,
+    /** Seconds until the caller may retry (sent as Retry-After and in the body). */
+    public retryAfter?: number
   ) {
     super(message);
   }
@@ -16,13 +18,19 @@ export const conflict = (message: string) => new ApiError(409, 'conflict', messa
 
 const NO_STORE = 'no-store';
 
-export function json(data: unknown, status = 200, cacheControl = NO_STORE): Response {
+export function json(
+  data: unknown,
+  status = 200,
+  cacheControl = NO_STORE,
+  extraHeaders: Record<string, string> = {}
+): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': cacheControl,
       'X-Content-Type-Options': 'nosniff',
+      ...extraHeaders,
     },
   });
 }
@@ -33,7 +41,12 @@ export function noContent(): Response {
 
 export function errorResponse(err: unknown): Response {
   if (err instanceof ApiError) {
-    return json({ error: { code: err.code, message: err.message } }, err.status);
+    return json(
+      { error: { code: err.code, message: err.message, retryAfter: err.retryAfter } },
+      err.status,
+      NO_STORE,
+      err.retryAfter ? { 'Retry-After': String(err.retryAfter) } : {}
+    );
   }
   console.error('[api] unexpected error', err);
   return json(

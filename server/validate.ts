@@ -255,7 +255,7 @@ export function cleanSite(input: unknown): SiteSettings {
     throw badRequest('حجم تنظیمات سایت بیش از حد مجاز است.');
   }
   const onlyStrings = (v: unknown, depth: number): boolean => {
-    if (typeof v === 'string') return true;
+    if (typeof v === 'string' || typeof v === 'boolean') return true;
     if (depth > 4) return false;
     if (Array.isArray(v)) return v.every((x) => onlyStrings(x, depth + 1));
     if (v && typeof v === 'object') return Object.values(v).every((x) => onlyStrings(x, depth + 1));
@@ -265,6 +265,7 @@ export function cleanSite(input: unknown): SiteSettings {
     throw badRequest('مقادیر تنظیمات سایت باید متن باشند.', 'validation');
   }
   const site = input as SiteSettings;
+  site.phoneLoginEnabled = site.phoneLoginEnabled === true;
   if (typeof site.introAudioUrl === 'string') {
     site.introAudioUrl = normalizeMediaUrl(site.introAudioUrl.trim());
     if (!isSafeUrl(site.introAudioUrl)) {

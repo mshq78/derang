@@ -5,6 +5,7 @@ import { getDb, Row, Statement } from './db.js';
 import { conflict, notFound } from './http.js';
 import { cleanBundle, cleanItem, cleanSite, COLLECTIONS } from './validate.js';
 import { normalizeMediaUrl } from './media.js';
+import { smsStatus } from './sms.js';
 
 type Item = Record<string, unknown> & { id: string; sortOrder: number; isPublished: boolean };
 
@@ -59,6 +60,13 @@ export async function readBundle(publishedOnly: boolean): Promise<ContentBundle>
     site: { ...DEFAULT_CONTENT.site, ...((siteRows[0]?.data as SiteSettings) ?? {}) },
   } as ContentBundle;
 
+  // Visitors are only asked to sign in when this server can actually send the SMS.
+  // Preview and production share one database; without this a deployment lacking SMS
+  // would lock everyone out. The admin still sees the stored switch.
+  if (publishedOnly) {
+    bundle.site = { ...bundle.site, phoneLoginEnabled: bundle.site.phoneLoginEnabled === true && smsStatus().configured };
+  }
+
   const lists = bundle as unknown as Record<CollectionName, Item[]>;
   for (const collection of COLLECTIONS) lists[collection] = [];
   for (const row of rows) lists[row.collection as CollectionName]?.push(rowToItem(row));
@@ -71,6 +79,7 @@ export async function readBundle(publishedOnly: boolean): Promise<ContentBundle>
  */
 export async function writeBundle(input: unknown, mode: 'seed' | 'replace'): Promise<void> {
   const { site, items } = cleanBundle(input);
+  if (mode === 'replace' && site.phoneLoginEnabled && !smsStatus().configured) throw conflict(SMS_NOT_READY);
   const rows = COLLECTIONS.flatMap((collection) =>
     items[collection].map((item) => ({
       collection,
@@ -107,8 +116,16 @@ export async function writeBundle(input: unknown, mode: 'seed' | 'replace'): Pro
   await getDb().transaction(statements);
 }
 
+const SMS_NOT_READY =
+  'ابتدا سامانه پیامکی را روی سرور تنظیم کنید (متغیر SMS_PROVIDER و متغیرهای وابسته)؛ بعد ورود با موبایل را روشن کنید.';
+
 export async function updateSite(input: unknown): Promise<SiteSettings> {
   const site = cleanSite(input);
+  if (site.phoneLoginEnabled && !smsStatus().configured) {
+    // Only block turning it on; saving other settings must keep working.
+    const [current] = await getDb().query(`SELECT data->>'phoneLoginEnabled' AS enabled FROM site_settings WHERE id = 1`);
+    if (current?.enabled !== 'true') throw conflict(SMS_NOT_READY);
+  }
   await getDb().transaction([
     {
       text: `INSERT INTO site_settings (id, data) VALUES (1, $1::jsonb)

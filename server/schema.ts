@@ -35,6 +35,38 @@ const SCHEMA: string[] = [
   `CREATE INDEX IF NOT EXISTS login_attempts_ip_idx ON login_attempts (ip, attempted_at)`,
 ];
 
+// Added after the first release; created on deployments that already have SCHEMA.
+const USER_SCHEMA: string[] = [
+  `CREATE TABLE IF NOT EXISTS users (
+    id text PRIMARY KEY,
+    phone text NOT NULL UNIQUE,
+    first_name text NOT NULL DEFAULT '',
+    last_name text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    last_login_at timestamptz
+  )`,
+  `CREATE TABLE IF NOT EXISTS user_sessions (
+    token_hash text PRIMARY KEY,
+    user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions (user_id)`,
+  `CREATE TABLE IF NOT EXISTS otp_codes (
+    id text PRIMARY KEY,
+    phone text NOT NULL,
+    code_hash text NOT NULL,
+    ip text NOT NULL,
+    attempts integer NOT NULL DEFAULT 0,
+    expires_at timestamptz NOT NULL,
+    consumed_at timestamptz,
+    verified_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS otp_codes_phone_idx ON otp_codes (phone, created_at)`,
+  `CREATE INDEX IF NOT EXISTS otp_codes_ip_idx ON otp_codes (ip, created_at)`,
+];
+
 let ready: Promise<void> | null = null;
 
 /**
@@ -53,10 +85,15 @@ export function ensureReady(): Promise<void> {
 
 async function init(): Promise<void> {
   const db = getDb();
-  // The index is created last, so its presence means the whole schema exists.
-  const [probe] = await db.query(`SELECT to_regclass('public.login_attempts_ip_idx') AS t`);
-  if (!probe?.t) {
+  // Each group's last index is created last, so its presence means the whole group exists.
+  const [probe] = await db.query(
+    `SELECT to_regclass('public.login_attempts_ip_idx') AS base, to_regclass('public.otp_codes_ip_idx') AS users`
+  );
+  if (!probe?.base) {
     for (const statement of SCHEMA) await db.query(statement);
+  }
+  if (!probe?.users) {
+    for (const statement of USER_SCHEMA) await db.query(statement);
   }
   const meta = await db.query('SELECT 1 FROM content_meta WHERE id = 1');
   if (meta.length === 0) {

@@ -14,11 +14,14 @@ import {
   Check,
 } from 'lucide-react';
 import { AppSettings, UserProfile } from '../types';
+import { maskPhone } from '../utils/phone';
 import { Modal } from './Modal';
 
 interface SettingsModalProps {
   settings: AppSettings;
   profile: UserProfile;
+  /** Signed-in account's phone number, shown masked under the name. */
+  phone?: string;
   onUpdateSettings: (newSettings: Partial<AppSettings>) => void;
   onUpdateProfile: (newProfile: UserProfile) => void;
   onClose: () => void;
@@ -31,6 +34,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   profile,
+  phone,
   onUpdateSettings,
   onUpdateProfile,
   onClose,
@@ -95,6 +99,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <span className="text-sm text-ink-2 font-medium">
                   {profile.first ? `${profile.first} ${profile.last}`.trim() : 'دوست همراه'}
                 </span>
+                {phone && (
+                  <span className="mt-0.5 block text-[13px] font-medium text-ink-3" dir="ltr">
+                    {maskPhone(phone)}
+                  </span>
+                )}
               </div>
               <button
                 onClick={() => {
