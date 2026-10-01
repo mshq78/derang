@@ -55,28 +55,26 @@ import {
 import { toPersianDigits } from '../utils/helpers';
 import { Modal } from './Modal';
 import { MediaField } from './MediaField';
-import {
-  adminGetAccountSummary,
-  adminGetSmsStatus,
-  adminImportAccounts,
-  adminSendTestSms,
-  type AccountRow,
-  type SmsStatus,
-} from '../lib/api';
+import { adminGetSmsStatus, adminSendTestSms, type SmsStatus } from '../lib/api';
 import { normalizeIranMobile } from '../utils/phone';
 
 interface AdminPanelProps {
   onBackToApp: () => void;
+  /**
+   * Set when the panel runs inside the management console: the console owns sign-in and
+   * navigation, and this component only shows one page (a content collection or the site settings).
+   */
+  embedded?: { tab: AdminTab; canWrite: boolean; canSettings: boolean };
 }
 
 type AdminTab = 'site' | CollectionName;
 type FormRecord = Record<string, string | number | boolean | string[] | undefined>;
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp, embedded }) => {
   const [content, setContent] = useState<ContentBundle>(DEFAULT_CONTENT);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(false);
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => !!getAdminToken());
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => !!embedded || !!getAdminToken());
   const [isSandboxMode, setIsSandboxMode] = useState<boolean>(false);
   // Editing is blocked until real data has loaded, so a failed or pending load
   // can never overwrite the database with the bundled defaults.
@@ -90,7 +88,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Active collection tab
-  const [activeTab, setActiveTab] = useState<AdminTab>('site');
+  const [activeTabState, setActiveTab] = useState<AdminTab>('site');
+  const activeTab: AdminTab = embedded ? embedded.tab : activeTabState;
+  const readOnly = !!embedded && !embedded.canWrite;
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals state
@@ -147,6 +147,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
   // Listen for session expiration events
   useEffect(() => {
     const handleExpired = () => {
+      if (embedded) return; // the console shows its own sign-in
       setIsAdmin(false);
       setHasLoaded(false);
       setIsSandboxMode(false);
@@ -154,7 +155,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
     };
     window.addEventListener('derang:session-expired', handleExpired);
     return () => window.removeEventListener('derang:session-expired', handleExpired);
-  }, []);
+  }, [embedded]);
 
   // Load content when logged in
   useEffect(() => {
@@ -556,6 +557,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
         className="hidden"
       />
 
+      {embedded && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleExportJson}
+              className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-bold text-ink-2 hover:text-ink hover:bg-surface-2 transition-colors"
+              title="پشتیبان‌گیری از تمام محتوا"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>پشتیبان‌گیری (JSON)</span>
+            </button>
+            {embedded.canSettings && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-bold text-ink-2 hover:text-ink hover:bg-surface-2 transition-colors"
+                title="بازیابی از فایل پشتیبان JSON"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                <span>بازیابی از فایل</span>
+              </button>
+            )}
+          </div>
+          {activeTab !== 'site' && !readOnly && (
+            <button
+              onClick={() => setEditingItem({ collection: activeTab, data: null, isNew: true })}
+              className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-surface hover:bg-primary-hover transition-colors shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              <span>افزودن مورد جدید</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {!embedded && (
+        <>
       {/* Top Header Card */}
       <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-line pb-4">
@@ -680,6 +717,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
         })}
       </div>
 
+        </>
+      )}
+
       {!hasLoaded && (
         <div className="rounded-3xl border border-line bg-surface p-8 text-center text-sm text-ink-2 shadow-sm">
           {isLoading ? (
@@ -700,12 +740,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
 
       {/* TAB CONTENT: Site Settings */}
       {hasLoaded && activeTab === 'site' && (
-        <SiteSettingsEditor
-          key={content.version}
-          settings={content.site}
-          onSave={handleSaveSiteSettings}
-          isSandbox={isSandboxMode}
-        />
+        <fieldset disabled={!!embedded && !embedded.canSettings} className="contents">
+          <SiteSettingsEditor
+            key={content.version}
+            settings={content.site}
+            onSave={handleSaveSiteSettings}
+            isSandbox={isSandboxMode}
+          />
+        </fieldset>
       )}
 
       {/* TAB CONTENT: Collections */}
@@ -744,6 +786,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToApp }) => {
             onTogglePublish={(item) => handleTogglePublish(activeTab as CollectionName, item)}
             onMoveUp={(idx) => handleMove(activeTab as CollectionName, idx, 'up')}
             onMoveDown={(idx) => handleMove(activeTab as CollectionName, idx, 'down')}
+            readOnly={readOnly}
           />
         </div>
       )}
@@ -951,6 +994,7 @@ interface CollectionListProps {
   onTogglePublish: (item: CollectionItem) => void;
   onMoveUp: (index: number) => void;
   onMoveDown: (index: number) => void;
+  readOnly?: boolean;
 }
 
 const CollectionList: React.FC<CollectionListProps> = ({
@@ -962,6 +1006,7 @@ const CollectionList: React.FC<CollectionListProps> = ({
   onTogglePublish,
   onMoveUp,
   onMoveDown,
+  readOnly = false,
 }) => {
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return items;
@@ -1041,7 +1086,7 @@ const CollectionList: React.FC<CollectionListProps> = ({
             </div>
 
             {/* Action buttons */}
-            <div className="flex items-center gap-1.5 self-end sm:self-center flex-shrink-0">
+            <div className={`flex items-center gap-1.5 self-end sm:self-center flex-shrink-0 ${readOnly ? 'hidden' : ''}`}>
               {/* Move buttons */}
               <button
                 type="button"
@@ -1246,108 +1291,6 @@ const PhoneLoginCard: React.FC<{
             </p>
           )}
         </div>
-      )}
-    </div>
-  );
-};
-
-/** One account per line: mobile, password, first name, last name (comma, tab or semicolon; a header line is skipped). */
-function parseAccountLines(text: string): AccountRow[] {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\uFEFF/, '').split(/[,\t;،]/).map((cell) => cell.trim()))
-    .filter((cells) => cells.some(Boolean) && normalizeIranMobile(cells[0] || '') !== null)
-    .map(([phone, password, firstName, lastName]) => ({
-      phone,
-      password: password || '',
-      firstName: firstName || '',
-      lastName: lastName || '',
-    }));
-}
-
-const AccountsCard: React.FC = () => {
-  const [summary, setSummary] = useState<{ total: number; withPassword: number } | null>(null);
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const refresh = useCallback(() => {
-    adminGetAccountSummary().then(setSummary).catch(() => setSummary(null));
-  }, []);
-  useEffect(refresh, [refresh]);
-
-  const run = async () => {
-    const rows = parseAccountLines(text);
-    if (rows.length === 0) {
-      setMessage({ ok: false, text: 'هیچ سطر معتبری پیدا نشد. هر سطر: شماره موبایل، رمز عبور، نام، نام خانوادگی.' });
-      return;
-    }
-    setBusy(true);
-    setMessage(null);
-    let created = 0;
-    let updated = 0;
-    const rejected: string[] = [];
-    try {
-      for (let i = 0; i < rows.length; i += 40) {
-        const res = await adminImportAccounts(rows.slice(i, i + 40));
-        created += res.created;
-        updated += res.updated;
-        res.rejected.forEach((r) => rejected.push(`سطر ${i + r.row}: ${r.reason}`));
-      }
-      setMessage({
-        ok: rejected.length === 0,
-        text: `${created} حساب ساخته و ${updated} حساب به‌روز شد.${rejected.length ? ' ردشده‌ها: ' + rejected.join('؛ ') : ''}`,
-      });
-      if (rejected.length === 0) setText('');
-    } catch (err: unknown) {
-      setMessage({ ok: false, text: `${err instanceof Error ? err.message : 'انجام نشد.'} (تا اینجا ${created} ساخته و ${updated} به‌روز شد)` });
-    } finally {
-      setBusy(false);
-      refresh();
-    }
-  };
-
-  return (
-    <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">
-      <h3 className="text-sm font-bold text-ink border-b border-line pb-2 flex items-center gap-2">
-        <Lock className="h-4 w-4 text-primary" />
-        <span>حساب‌های کاربری (ورود با رمز عبور)</span>
-      </h3>
-      <p className="text-[13px] text-ink-3 leading-relaxed">
-        {summary ? `${toPersianDigits(summary.withPassword)} حساب با رمز عبور از ${toPersianDigits(summary.total)} حساب ثبت‌شده. ` : ''}
-        هر سطر یک نفر: شماره موبایل، رمز عبور، نام، نام خانوادگی (با ویرگول یا تب جدا شود). اگر شماره از قبل باشد،
-        رمز و نام به‌روز می‌شود. رمزها فقط به‌صورت رمزنگاری‌شده ذخیره می‌شوند و بعداً قابل مشاهده نیستند.
-      </p>
-      <input
-        type="file"
-        accept=".csv,.txt,text/csv,text/plain"
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          if (file) setText(await file.text());
-          e.target.value = '';
-        }}
-        className="block w-full text-xs text-ink-2 file:ml-3 file:rounded-xl file:border file:border-line file:bg-surface-2 file:px-3 file:py-2 file:text-xs file:font-bold file:text-ink"
-      />
-      <textarea
-        dir="ltr"
-        rows={6}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={'09123456789,12345,علی,احمدی'}
-        className="w-full rounded-xl border border-line bg-surface-2 px-3 py-2 text-xs text-ink focus:border-primary focus:outline-none font-mono"
-      />
-      <button
-        type="button"
-        onClick={run}
-        disabled={busy || !text.trim()}
-        className="rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-surface hover:bg-primary-hover disabled:opacity-60"
-      >
-        {busy ? 'در حال ساخت حساب‌ها...' : 'ساخت یا به‌روزرسانی حساب‌ها'}
-      </button>
-      {message && (
-        <p role="status" className={`text-[13px] font-medium ${message.ok ? 'text-success-ink' : 'text-danger-ink'}`}>
-          {message.text}
-        </p>
       )}
     </div>
   );
@@ -1571,8 +1514,6 @@ const SiteSettingsEditor: React.FC<SiteSettingsEditorProps> = ({ settings, onSav
         onTogglePassword={(value) => handleChange('passwordLoginEnabled', value)}
         isSandbox={isSandbox}
       />
-
-      <AccountsCard />
 
       {/* Why Page Content */}
       <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 space-y-4 shadow-sm">

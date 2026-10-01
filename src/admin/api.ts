@@ -1,0 +1,118 @@
+import { apiFetch } from '../lib/api';
+
+export type Permission =
+  | 'content.read'
+  | 'content.write'
+  | 'users.read'
+  | 'users.write'
+  | 'staff.manage'
+  | 'settings.write'
+  | 'audit.read';
+
+export interface AdminIdentity {
+  username: string;
+  displayName: string;
+  role: string;
+  permissions: Permission[];
+}
+
+export interface Member {
+  id: string;
+  phone: string;
+  firstName: string;
+  lastName: string;
+  disabled: boolean;
+  hasPassword: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface MemberPage {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: Member[];
+}
+
+export interface StaffMember {
+  id: string;
+  username: string;
+  displayName: string;
+  role: string;
+  active: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface RoleInfo {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface AuditEntry {
+  id: number;
+  at: string;
+  actor: string;
+  action: string;
+  target: string;
+  detail: string;
+}
+
+export interface DashboardData {
+  members: {
+    total: number;
+    disabled: number;
+    withPassword: number;
+    everLoggedIn: number;
+    activeWeek: number;
+    activeDay: number;
+  };
+  content: { collection: string; total: number; published: number }[];
+  staff: { total: number; active: number };
+  access: { openAccess: boolean; passwordLogin: boolean; smsLogin: boolean; smsConfigured: boolean };
+}
+
+export interface ImportResult {
+  created: number;
+  updated: number;
+  rejected: { row: number; reason: string }[];
+}
+
+export interface MemberInput {
+  phone: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}
+
+const get = <T,>(path: string) => apiFetch<T>(path, { method: 'GET' }, true);
+const send = <T,>(method: string, path: string, body?: unknown) =>
+  apiFetch<T>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }, true);
+
+export const fetchMe = () => get<{ admin: AdminIdentity }>('/api/admin/me').then((r) => r.admin);
+export const fetchDashboard = () => get<DashboardData>('/api/admin/dashboard');
+
+export const listMembers = (params: { q?: string; status?: string; page?: number; pageSize?: number }) => {
+  const query = new URLSearchParams();
+  if (params.q) query.set('q', params.q);
+  if (params.status) query.set('status', params.status);
+  query.set('page', String(params.page ?? 1));
+  query.set('pageSize', String(params.pageSize ?? 25));
+  return get<MemberPage>(`/api/admin/users?${query}`);
+};
+export const createMember = (input: MemberInput) => send<Member>('POST', '/api/admin/users', input);
+export const updateMember = (id: string, input: Partial<MemberInput> & { disabled?: boolean }) =>
+  send<Member>('PUT', `/api/admin/users/${encodeURIComponent(id)}`, input);
+export const deleteMember = (id: string) => send<void>('DELETE', `/api/admin/users/${encodeURIComponent(id)}`);
+export const importMembers = (users: MemberInput[]) => send<ImportResult>('POST', '/api/admin/users/import', { users });
+
+export const listStaff = () => get<{ roles: RoleInfo[]; items: StaffMember[] }>('/api/admin/staff');
+export const createStaff = (input: { username: string; displayName: string; role: string; password: string }) =>
+  send<StaffMember>('POST', '/api/admin/staff', input);
+export const updateStaff = (id: string, input: Partial<{ displayName: string; role: string; active: boolean; password: string }>) =>
+  send<StaffMember>('PUT', `/api/admin/staff/${encodeURIComponent(id)}`, input);
+export const deleteStaff = (id: string) => send<void>('DELETE', `/api/admin/staff/${encodeURIComponent(id)}`);
+
+export const listAudit = (limit = 50, offset = 0) =>
+  get<{ items: AuditEntry[] }>(`/api/admin/audit?limit=${limit}&offset=${offset}`).then((r) => r.items);

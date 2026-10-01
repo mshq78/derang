@@ -122,7 +122,7 @@ export const setSandboxContent = (bundle: ContentBundle): void => {
 
 const REQUEST_TIMEOUT_MS = 10000;
 
-async function apiFetch<T>(
+export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
   isAdminEndpoint = false

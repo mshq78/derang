@@ -151,3 +151,18 @@ VITE_API_BASE_URL=https://your-api-server.com
 
 فرمت بازگشت خطای سرور: `{ "error": { "code": "string", "message": "string" } }` که متن `message` مستقیماً به کاربر مدیر نمایش داده می‌شود.
 
+
+
+## Management panel (`/admin`)
+
+A sidebar console with a dashboard, every content collection, site members, panel accounts with roles,
+site settings and an activity log.
+
+- **Owner account:** `ADMIN_USERNAME` / `ADMIN_PASSWORD` (always works, full access).
+- **Panel accounts** (Admins and roles page): `admin` (everything), `editor` (content only), `support`
+  (site members only), `viewer` (read-only). Permissions are enforced on the server.
+- **Site members:** created one by one or imported from an Excel/CSV file (mobile number = user name, any
+  column, e.g. a personnel code, = password). They sign in with mobile + password when
+  «ورود با نام کاربری و رمز عبور» is switched on in Settings. Passwords are stored as scrypt hashes.
+- **Activity log:** sign-ins to the panel and every change to content, settings, members and panel accounts.
+- API: `/api/admin/{me,dashboard,users,users/import,staff,audit}` plus the existing content endpoints.

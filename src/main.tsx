@@ -4,8 +4,8 @@ import App from './App.tsx';
 import { ContentProvider } from './context/ContentContext';
 import './index.css';
 
-const AdminPanel = lazy(() =>
-  import('./components/AdminPanel.tsx').then((module) => ({ default: module.AdminPanel }))
+const AdminConsole = lazy(() =>
+  import('./admin/AdminConsole.tsx').then((module) => ({ default: module.AdminConsole }))
 );
 
 function Root() {
@@ -33,7 +33,7 @@ function Root() {
             </div>
           }
         >
-          <AdminPanel
+          <AdminConsole
             onBackToApp={() => {
               window.location.href = '/';
             }}
