@@ -6,6 +6,8 @@ export interface TripTaskDone {
   correct?: boolean;
   choice?: number;
   character?: string;
+  correctIndex?: number;
+  why?: string;
 }
 
 export interface StageScoreView {
@@ -40,7 +42,7 @@ export const submitTripTest = (character: string) =>
   authFetch<{ ok: true; name: string }>('/trip/test', { method: 'POST', body: JSON.stringify({ character }) });
 
 export const answerTripQuestion = (stageId: string, questionId: string, choice: number) =>
-  authFetch<{ choice: number; correct: boolean; correctIndex: number }>('/trip/answer', {
+  authFetch<{ choice: number; correct: boolean; correctIndex: number; why?: string }>('/trip/answer', {
     method: 'POST',
     body: JSON.stringify({ stageId, questionId, choice }),
   });

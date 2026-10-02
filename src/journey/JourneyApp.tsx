@@ -133,7 +133,7 @@ export const JourneyApp: React.FC<{
   };
 
   const contentSlice = useMemo(
-    () => ({ site: content.site, audioStories: content.audioStories, videos: content.videos, people: content.people }),
+    () => ({ site: content.site, audioStories: content.audioStories, videos: content.videos, people: content.people, tour: content.tour }),
     [content]
   );
 

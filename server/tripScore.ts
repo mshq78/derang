@@ -24,9 +24,12 @@ export interface Score {
 const groupFirstDone = (stage: StageDef, rows: Map<string, TaskRow>) =>
   stage.groups.map((g) => {
     const media = g.items.map((i) => rows.get(taskId.media(stage.id, g.id, i.key))).filter(Boolean) as TaskRow[];
-    const text = g.text ? rows.get(taskId.media(stage.id, g.id, 'text')) : undefined;
-    // Reading the text counts as one way to finish the part; the bonus needs both audio and video.
-    return { group: g, done: text ? [...media, text] : media, mediaDone: media.length };
+    // Reading the text, the guided tour or the person's own confirmation each count as one way to
+    // finish the part; the bonus needs both audio and video.
+    const others = ['text', 'tour', 'confirm']
+      .map((k) => rows.get(taskId.media(stage.id, g.id, k)))
+      .filter(Boolean) as TaskRow[];
+    return { group: g, done: [...media, ...others], mediaDone: media.length };
   });
 
 /** Pure scoring: points and badges from a member's task rows and the stage opening times (epoch ms). */

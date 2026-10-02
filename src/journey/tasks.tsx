@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, ExternalLink } from 'lucide-react';
+import { CheckCircle2, ExternalLink, XCircle } from 'lucide-react';
 import { CHARACTERS, type QuizQuestion } from '../data/journey';
-import type { Person } from '../types/content';
+import type { Person, TourSlide } from '../types/content';
+import { TourModal } from '../components/TourModal';
 import { CardViewer } from '../components/CardViewer';
 import { answerTripQuestion, submitTripTest, type TripTaskDone } from '../lib/trip';
 import { cx } from '../admin/ui';
@@ -174,13 +175,39 @@ const CardFallback: React.FC<{ person: Person; onSeen: () => void; onClose: () =
   );
 };
 
+export const TourTask: React.FC<{
+  slides: TourSlide[];
+  done: boolean;
+  onFinished: () => void;
+}> = ({ slides, done, onFinished }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-ink">تور راهنمای درنگ</p>
+        {done && <CheckCircle2 className="h-6 w-6 text-success" aria-label="انجام شد" />}
+      </div>
+      <p className="mt-1 text-[13px] leading-relaxed text-ink-3">
+        اگر نمی‌توانید صوت معرفی را بشنوید، تور را تا آخر ببینید؛ به‌جای صوت حساب می‌شود.
+      </p>
+      <button type="button" onClick={() => setOpen(true)} className="mt-3 w-full rounded-xl border border-line bg-surface-2 py-2.5 text-sm font-bold text-ink hover:bg-surface">
+        {done ? 'دوباره دیدن تور' : 'شروع تور'}
+      </button>
+      {open && <TourModal tourSlides={slides} onClose={() => setOpen(false)} onFinished={onFinished} finishLabel="پایان تور" />}
+    </div>
+  );
+};
+
+type Answered = { choice: number; correct: boolean; correctIndex: number; why?: string };
+
+/** Each answer is explained right away, right or wrong: green with the reason, or red with the correct option and the reason. */
 export const Quiz: React.FC<{
   stageId: string;
   questions: QuizQuestion[];
   done: Record<string, TripTaskDone>;
   onAnswered: () => void;
 }> = ({ stageId, questions, done, onAnswered }) => {
-  const [local, setLocal] = useState<Record<string, { choice: number; correct: boolean; correctIndex: number }>>({});
+  const [local, setLocal] = useState<Record<string, Answered>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -200,44 +227,73 @@ export const Quiz: React.FC<{
     }
   };
 
+  const result = (q: QuizQuestion): Answered | null => {
+    if (local[q.id]) return local[q.id];
+    const server = done[`${stageId}:q:${q.id}`];
+    if (server && server.choice !== undefined && server.correctIndex !== undefined) {
+      return { choice: server.choice, correct: server.correct === true, correctIndex: server.correctIndex, why: server.why };
+    }
+    return null;
+  };
+
+  const total = questions.length;
+  const answeredCount = questions.filter((q) => result(q)).length;
+  const rightCount = questions.filter((q) => result(q)?.correct).length;
+
   return (
-    <div className="space-y-3 rounded-2xl border border-line bg-surface p-4">
-      <p className="text-sm font-bold text-ink">سؤال‌های امتیازی <span className="text-xs font-normal text-ink-3">(هر پاسخ درست ۱۰ امتیاز؛ پاسخ اول ثبت می‌شود)</span></p>
+    <div className="space-y-4 rounded-2xl border border-line bg-surface p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-ink">سؤال‌های امتیازی</p>
+        <span className="text-xs text-ink-3">{toPersianDigits(answeredCount)} از {toPersianDigits(total)} · هر پاسخ درست ۱۰ امتیاز</span>
+      </div>
       {questions.map((q, qi) => {
-        const server = done[`${stageId}:q:${q.id}`];
-        const res = local[q.id];
-        const chosen = res?.choice ?? server?.choice;
-        const answered = chosen !== undefined;
+        const res = result(q);
         return (
           <div key={q.id} className="space-y-2">
             <p className="text-[13px] font-bold leading-relaxed text-ink">{toPersianDigits(qi + 1)}. {q.text}</p>
             <div className="grid gap-1.5">
               {q.options.map((opt, oi) => {
-                const isChosen = chosen === oi;
-                const isCorrect = res ? res.correctIndex === oi : false;
+                const isChosen = res?.choice === oi;
+                const isCorrect = res?.correctIndex === oi;
                 return (
                   <button
                     key={oi}
                     type="button"
-                    disabled={answered || busy === q.id}
+                    disabled={!!res || busy === q.id}
                     onClick={() => answer(q, oi)}
                     className={cx(
-                      'rounded-xl border px-3 py-2 text-right text-[13px] transition-colors',
-                      !answered && 'border-line bg-surface-2 text-ink hover:bg-surface',
-                      answered && isCorrect && 'border-success bg-success-soft font-bold text-success-ink',
-                      answered && isChosen && !isCorrect && res && 'border-danger bg-danger-soft text-danger-ink',
-                      answered && isChosen && !res && (server?.correct ? 'border-success bg-success-soft font-bold text-success-ink' : 'border-danger bg-danger-soft text-danger-ink'),
-                      answered && !isChosen && !isCorrect && 'border-line bg-surface-2 text-ink-3'
+                      'flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-right text-[13px] transition-colors',
+                      !res && 'border-line bg-surface-2 text-ink hover:bg-surface active:scale-[0.99]',
+                      res && isCorrect && 'border-success bg-success-soft font-bold text-success-ink',
+                      res && isChosen && !isCorrect && 'border-danger bg-danger-soft text-danger-ink',
+                      res && !isChosen && !isCorrect && 'border-line bg-surface-2 text-ink-3 opacity-70'
                     )}
                   >
-                    {opt}
+                    <span>{opt}</span>
+                    {res && isCorrect && <CheckCircle2 className="h-4 w-4 flex-shrink-0" />}
+                    {res && isChosen && !isCorrect && <XCircle className="h-4 w-4 flex-shrink-0" />}
                   </button>
                 );
               })}
             </div>
+            {res && (
+              <div
+                role="status"
+                className={cx('rounded-xl px-3 py-2.5 text-[13px] leading-relaxed', res.correct ? 'bg-success-soft text-success-ink' : 'bg-danger-soft text-danger-ink')}
+              >
+                <p className="font-extrabold">{res.correct ? 'آفرین! درست بود (+۱۰ امتیاز)' : 'این بار درست نبود؛ نگران نباشید، یاد گرفتن همین است.'}</p>
+                {!res.correct && <p className="mt-1 font-bold">پاسخ درست: {q.options[res.correctIndex]}</p>}
+                {res.why && <p className="mt-1 font-normal">{res.why}</p>}
+              </div>
+            )}
           </div>
         );
       })}
+      {answeredCount === total && (
+        <p className="rounded-xl bg-primary-soft px-3 py-2 text-center text-[13px] font-extrabold text-primary">
+          {toPersianDigits(rightCount)} پاسخ درست از {toPersianDigits(total)} · {toPersianDigits(rightCount * 10)} امتیاز
+        </p>
+      )}
       {error && <p role="alert" className="text-[13px] font-bold text-danger-ink">{error}</p>}
     </div>
   );

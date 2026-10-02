@@ -18,6 +18,9 @@ import { Modal } from './Modal';
 interface TourModalProps {
   onClose: () => void;
   tourSlides?: TourSlide[];
+  /** Called when the last step is confirmed (the tour was followed to the end). */
+  onFinished?: () => void;
+  finishLabel?: string;
 }
 
 const ICON_MAP = {
@@ -70,7 +73,7 @@ const DEFAULT_SLIDES = [
   },
 ];
 
-export const TourModal: React.FC<TourModalProps> = ({ onClose, tourSlides }) => {
+export const TourModal: React.FC<TourModalProps> = ({ onClose, tourSlides, onFinished, finishLabel = 'ورود به درنگ' }) => {
   const [step, setStep] = useState(0);
 
   const slides = React.useMemo(() => {
@@ -94,6 +97,7 @@ export const TourModal: React.FC<TourModalProps> = ({ onClose, tourSlides }) => 
 
   const handleNext = () => {
     if (isLast) {
+      onFinished?.();
       onClose();
     } else {
       setStep(step + 1);
@@ -119,9 +123,9 @@ export const TourModal: React.FC<TourModalProps> = ({ onClose, tourSlides }) => 
       <button
         onClick={handleNext}
         className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-surface shadow-sm hover:bg-primary-hover active:scale-95 transition-all"
-        aria-label={isLast ? 'ورود به درنگ' : 'گام بعدی راهنما'}
+        aria-label={isLast ? finishLabel : 'گام بعدی راهنما'}
       >
-        <span>{isLast ? 'ورود به درنگ' : 'گام بعدی'}</span>
+        <span>{isLast ? finishLabel : 'گام بعدی'}</span>
         {isLast ? <Check className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </button>
     </>

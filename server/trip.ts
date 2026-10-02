@@ -1,10 +1,15 @@
 import { getDb } from './db.js';
 import { ApiError, badRequest, conflict, notFound } from './http.js';
 import { CHARACTERS, STAGES, taskId } from '../src/data/journey.js';
+import { WHY } from './tripAnswers.js';
 import { correctIndex, isCharacter, score, type Score, type TaskRow } from './tripScore.js';
 import type { PublicUser } from './userAuth.js';
 
 const GROUPS = ['1', '2'];
+const ANSWER_INDEX = (key: string): number | undefined => {
+  const [stage, question] = key.split(':');
+  return correctIndex(stage, question);
+};
 export const isGroup = (value: unknown): value is string => typeof value === 'string' && GROUPS.includes(value);
 
 interface GroupData {
@@ -74,7 +79,19 @@ export async function tripState(user: PublicUser) {
     started: data.opened[STAGES[0].id] !== undefined,
     opened: data.opened,
     done: Object.fromEntries(
-      myRows.map((r) => [r.task_id, { at: r.done_at, ...(r.meta.correct !== undefined ? { correct: r.meta.correct, choice: r.meta.choice } : {}), ...(r.meta.character ? { character: r.meta.character } : {}) }])
+      myRows.map((r) => {
+        const quiz = /^(s\d+):q:(.+)$/.exec(r.task_id);
+        const key = quiz ? `${quiz[1]}:${quiz[2]}` : '';
+        return [
+          r.task_id,
+          {
+            at: r.done_at,
+            ...(r.meta.correct !== undefined ? { correct: r.meta.correct, choice: r.meta.choice } : {}),
+            ...(quiz ? { correctIndex: ANSWER_INDEX(key), why: WHY[key] } : {}),
+            ...(r.meta.character ? { character: r.meta.character } : {}),
+          },
+        ];
+      })
     ),
     me: mine ? { points: mine.s.points, rank, of: scored.length, badges: mine.s.badges, stages: mine.s.stages } : null,
     top: scored.slice(0, 3).map((x, i) => ({ rank: i + 1, name: x.m.short, points: x.s.points, badges: x.s.badges.length })),
@@ -110,9 +127,10 @@ export async function completeTask(user: PublicUser, body: unknown) {
   }
   const group = stage.groups.find((g) => g.id === groupId);
   const item = group?.items.find((i) => i.key === key);
-  const isText = key === 'text' && group?.text === true;
-  if (!group || (!item && !isText)) throw badRequest('کار نامعتبر است.');
-  await record(user, taskId.media(stage.id, group.id, isText ? 'text' : item!.key));
+  const alternative =
+    (key === 'text' && group?.text === true) || (key === 'tour' && group?.tour === true) || key === 'confirm';
+  if (!group || (!item && !alternative)) throw badRequest('کار نامعتبر است.');
+  await record(user, taskId.media(stage.id, group.id, alternative ? String(key) : item!.key));
   return { ok: true };
 }
 
@@ -136,7 +154,7 @@ export async function answerQuestion(user: PublicUser, body: unknown) {
   await record(user, taskId.quiz(stage.id, question.id), { choice, correct: choice === correct });
   const [row] = await getDb().query('SELECT meta FROM trip_progress WHERE user_id = $1 AND task_id = $2', [user.id, taskId.quiz(stage.id, question.id)]);
   const meta = (row?.meta ?? {}) as { choice?: number; correct?: boolean };
-  return { choice: meta.choice, correct: meta.correct === true, correctIndex: correct };
+  return { choice: meta.choice, correct: meta.correct === true, correctIndex: correct, why: WHY[`${stage.id}:${question.id}`] };
 }
 
 // ---------------------------------------------------------------------------

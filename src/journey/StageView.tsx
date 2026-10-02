@@ -1,19 +1,21 @@
 import React from 'react';
-import { ArrowRight, Lock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRight, CheckCircle2, Lock } from 'lucide-react';
 import { STAGES, taskId, type MediaItem, type StageDef } from '../data/journey';
-import type { AudioStory, Person, VideoItem } from '../types/content';
+import type { AudioStory, Person, TourSlide, VideoItem } from '../types/content';
 import type { SiteSettings } from '../types/content';
 import { bodyTaskId, completeOrQueue, type CompleteBody, type TripState } from '../lib/trip';
 import { TrackedAudio } from './TrackedAudio';
 import { TrackedVideo } from './TrackedVideo';
 import { JOURNEY_TEXTS } from '../data/journeyTexts';
-import { CardsTask, Quiz, TextPanel, TestTask } from './tasks';
+import { CardsTask, Quiz, TextPanel, TestTask, TourTask } from './tasks';
 
 interface ContentSlice {
   site: SiteSettings;
   audioStories: AudioStory[];
   videos: VideoItem[];
   people: Person[];
+  tour: TourSlide[];
 }
 
 function resolve(item: MediaItem, content: ContentSlice): { url: string; title: string; poster?: string } | null {
@@ -70,13 +72,20 @@ export const StageView: React.FC<{
             const available = group.items
               .map((item) => ({ item, found: resolve(item, content) }))
               .filter((x): x is { item: MediaItem; found: NonNullable<ReturnType<typeof resolve>> } => x.found !== null);
-            const doneCount = group.items.filter((i) => done[taskId.media(stage.id, group.id, i.key)]).length;
+            const groupDone = ['audio', 'video', 'text', 'tour', 'confirm'].some((k) => done[taskId.media(stage.id, group.id, k)]);
             return (
               <div key={group.id} className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-extrabold text-ink">{group.title}</p>
+                  {groupDone && (
+                    <span className="flex items-center gap-1 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-bold text-success-ink">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> انجام شد
+                    </span>
+                  )}
+                </div>
                 {group.items.length > 1 && (
                   <p className="text-xs text-ink-3">
-                    {group.title}: صوت یا ویدیو را ببینید (یا متن را بخوانید)؛ اگر هر دو، صوت و ویدیو را انجام دهید، امتیاز بیشتری می‌گیرید.
-                    {doneCount > 0 ? '' : ''}
+                    صوت یا ویدیو را ببینید (یا متن را بخوانید)؛ اگر هر دو، صوت و ویدیو را انجام دهید، امتیاز بیشتری می‌گیرید.
                   </p>
                 )}
                 {available.length === 0 && (
@@ -104,6 +113,13 @@ export const StageView: React.FC<{
                     />
                   )
                 )}
+                {group.tour && (
+                  <TourTask
+                    slides={content.tour}
+                    done={!!done[taskId.media(stage.id, group.id, 'tour')]}
+                    onFinished={report({ stageId: stage.id, groupId: group.id, key: 'tour' })}
+                  />
+                )}
                 {group.text && JOURNEY_TEXTS[group.id] && (
                   <TextPanel
                     text={JOURNEY_TEXTS[group.id]}
@@ -122,8 +138,89 @@ export const StageView: React.FC<{
             <CardsTask people={content.people} userId={userId} done={!!done[taskId.cards]} onFinished={report({ stageId: stage.id, special: 'cards' })} />
           )}
           <Quiz stageId={stage.id} questions={stage.quiz} done={done} onAnswered={refresh} />
+
+          <StageConfirm
+            stage={stage}
+            complete={!!state.me?.stages[stage.id]?.complete}
+            done={done}
+            send={(body) => completeOrQueue(userId, body)}
+            markDone={markDone}
+            refresh={refresh}
+          />
         </>
       )}
+    </div>
+  );
+};
+
+/** A big button to confirm the whole stage by hand (for when the sound or video would not play). */
+const StageConfirm: React.FC<{
+  stage: StageDef;
+  complete: boolean;
+  done: Record<string, unknown>;
+  send: (body: CompleteBody) => Promise<'sent' | 'queued'>;
+  markDone: (task: string) => void;
+  refresh: () => void;
+}> = ({ stage, complete, done, send, markDone, refresh }) => {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 6000);
+    return () => clearTimeout(t);
+  }, [armed]);
+
+  if (complete) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-3xl bg-success-soft p-5 text-base font-extrabold text-success-ink">
+        <CheckCircle2 className="h-6 w-6" /> این مرحله را انجام دادید
+      </div>
+    );
+  }
+
+  const confirm = async () => {
+    setBusy(true);
+    setNote(null);
+    const bodies: CompleteBody[] = [];
+    for (const group of stage.groups) {
+      const finished = ['audio', 'video', 'text', 'tour', 'confirm'].some((k) => done[taskId.media(stage.id, group.id, k)]);
+      if (!finished) bodies.push({ stageId: stage.id, groupId: group.id, key: 'confirm' });
+    }
+    if (stage.special?.includes('cards') && !done[taskId.cards]) bodies.push({ stageId: stage.id, special: 'cards' });
+    try {
+      for (const body of bodies) {
+        if ((await send(body)) === 'queued') markDone(bodyTaskId(body));
+      }
+      if (stage.special?.includes('test') && !done[taskId.test]) {
+        setNote('بخش‌های دیگر ثبت شد. برای تکمیل مرحله، نتیجه‌ی تست شخصیت را هم انتخاب و ثبت کنید.');
+      }
+      refresh();
+    } catch {
+      setNote('ثبت نشد؛ اتصال را بررسی کنید و دوباره بزنید.');
+    } finally {
+      setBusy(false);
+      setArmed(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => (armed ? void confirm() : setArmed(true))}
+        className={`w-full rounded-3xl px-5 py-5 text-center text-base font-extrabold shadow-md transition-all active:scale-[0.99] disabled:opacity-60 ${
+          armed ? 'bg-success text-surface' : 'bg-primary text-surface'
+        }`}
+      >
+        {busy ? 'در حال ثبت...' : armed ? 'بله، این مرحله را انجام دادم' : 'من این مرحله را انجام دادم'}
+        <span className="mt-1 block text-xs font-normal opacity-90">
+          {armed ? 'برای تأیید نهایی یک بار دیگر بزنید' : 'اگر صوت یا ویدیو پخش نشد، همین‌جا تأیید کنید'}
+        </span>
+      </button>
+      {note && <p role="status" className="rounded-xl bg-warning-soft px-3 py-2 text-[13px] font-bold text-warning-ink">{note}</p>}
     </div>
   );
 };

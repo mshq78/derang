@@ -23,6 +23,8 @@ export interface MediaGroup {
   items: MediaItem[];
   /** A written version exists (JOURNEY_TEXTS[id]); reading it counts like listening or watching. */
   text?: boolean;
+  /** The in-app guided tour counts like listening (the introduction). */
+  tour?: boolean;
 }
 
 export interface QuizQuestion {
@@ -59,7 +61,7 @@ export const STAGES: StageDef[] = [
     title: 'جاگیری و آغاز',
     subtitle: 'معرفی درنگ، تست شخصیت تصمیم‌گیری و کارت پنج شخصیت',
     fastMinutes: 90,
-    groups: [{ id: 'intro', title: 'معرفی صوتی درنگ', base: 60, bonus: 0, items: [{ key: 'audio', ref: { source: 'intro' } }] }],
+    groups: [{ id: 'intro', title: 'معرفی درنگ', base: 60, bonus: 0, items: [{ key: 'audio', ref: { source: 'intro' } }], tour: true }],
     special: ['test', 'cards'],
     quiz: [],
   },
