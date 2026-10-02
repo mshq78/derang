@@ -160,6 +160,14 @@ export const JourneyApp: React.FC<{
   const stageDef = openStage ? STAGES.find((s) => s.id === openStage) : null;
   useBackLayer(!!stageDef, () => setOpenStage(null));
 
+  // A stage opens at its top, not at the scroll position of the list it came from.
+  useEffect(() => {
+    if (!openStage) return;
+    window.scrollTo(0, 0);
+    const t = setTimeout(() => window.scrollTo(0, 0), 60);
+    return () => clearTimeout(t);
+  }, [openStage]);
+
   const logout = async () => {
     setLeaving(true);
     try {
