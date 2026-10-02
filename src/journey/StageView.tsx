@@ -137,7 +137,7 @@ export const StageView: React.FC<{
           {stage.special?.includes('cards') && (
             <CardsTask people={content.people} userId={userId} done={!!done[taskId.cards]} onFinished={report({ stageId: stage.id, special: 'cards' })} />
           )}
-          <Quiz stageId={stage.id} questions={stage.quiz} done={done} onAnswered={refresh} />
+          <Quiz stageId={stage.id} questions={stage.quiz} done={done} counted={!!state.me?.stages[stage.id]?.complete} onAnswered={refresh} />
 
           <StageConfirm
             stage={stage}

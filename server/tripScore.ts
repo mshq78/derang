@@ -1,4 +1,4 @@
-import { BADGES, CHARACTERS, POINTS, STAGES, taskId, type StageDef } from '../src/data/journey.js';
+import { BADGES, CHARACTERS, CONFIRM_SHARE, POINTS, STAGES, taskId, type StageDef } from '../src/data/journey.js';
 import { ANSWERS } from './tripAnswers.js';
 
 export interface TaskRow {
@@ -19,37 +19,41 @@ export interface Score {
   points: number;
   stages: Record<string, StageScore>;
   badges: string[];
+  /** Correct quiz answers in total and when the last stage was finished: tie-breakers on the board. */
+  correct: number;
+  lastAt: number | null;
 }
 
 const groupFirstDone = (stage: StageDef, rows: Map<string, TaskRow>) =>
   stage.groups.map((g) => {
     const media = g.items.map((i) => rows.get(taskId.media(stage.id, g.id, i.key))).filter(Boolean) as TaskRow[];
-    // Reading the text, the guided tour or the person's own confirmation each count as one way to
-    // finish the part; the bonus needs both audio and video.
-    const others = ['text', 'tour', 'confirm']
+    // Reading the text or the guided tour count like listening; the bonus needs both audio and video.
+    // The self-confirm button also finishes the part, but for a smaller share of the points.
+    const others = ['text', 'tour']
       .map((k) => rows.get(taskId.media(stage.id, g.id, k)))
       .filter(Boolean) as TaskRow[];
-    return { group: g, done: [...media, ...others], mediaDone: media.length };
+    const confirmed = rows.get(taskId.media(stage.id, g.id, 'confirm'));
+    return { group: g, done: [...media, ...others, ...(confirmed ? [confirmed] : [])], mediaDone: media.length, confirmOnly: !!confirmed && media.length + others.length === 0 };
   });
 
 /** Pure scoring: points and badges from a member's task rows and the stage opening times (epoch ms). */
 export function score(rowsList: TaskRow[], opened: Record<string, number>, adjustment = 0): Score {
   const rows = new Map(rowsList.map((r) => [r.task_id, r]));
-  const result: Score = { points: 0, stages: {}, badges: [] };
+  const result: Score = { points: 0, stages: {}, badges: [], correct: 0, lastAt: null };
 
   for (const stage of STAGES) {
     let points = 0;
     const partTimes: number[] = [];
     let allParts = true;
 
-    for (const { group, done, mediaDone } of groupFirstDone(stage, rows)) {
+    for (const { group, done, mediaDone, confirmOnly } of groupFirstDone(stage, rows)) {
       if (done.length === 0) {
         allParts = false;
         continue;
       }
-      points += group.base + (mediaDone > 1 ? group.bonus : 0);
+      points += confirmOnly ? Math.round(group.base * CONFIRM_SHARE) : group.base + (mediaDone > 1 ? group.bonus : 0);
       partTimes.push(Math.min(...done.map((d) => d.done_at)));
-      if (mediaDone > 1 && group.bonus > 0) result.badges.push(`both:${stage.id}`);
+      if (mediaDone > 1 && group.bonus > 0 && !result.badges.includes(`both:${stage.id}`)) result.badges.push(`both:${stage.id}`);
     }
     for (const special of stage.special ?? []) {
       const row = rows.get(special === 'test' ? taskId.test : taskId.cards);
@@ -66,17 +70,22 @@ export function score(rowsList: TaskRow[], opened: Record<string, number>, adjus
       const row = rows.get(taskId.quiz(stage.id, q.id));
       if (row && row.meta.correct === true) correct++;
     }
-    points += correct * POINTS.quiz;
-
+    // Answers earn points only once the parts above them are done, so answering alone does not pay.
     const complete = allParts && stage.groups.length + (stage.special?.length ?? 0) > 0;
+    if (complete) {
+      points += correct * POINTS.quiz;
+      result.correct += correct;
+    }
+
     const completedAt = complete ? Math.max(...partTimes) : null;
     result.stages[stage.id] = { id: stage.id, points, complete, completedAt };
     result.points += points;
+    if (completedAt !== null) result.lastAt = Math.max(result.lastAt ?? 0, completedAt);
 
     if (complete && opened[stage.id] !== undefined && completedAt! <= opened[stage.id] + stage.fastMinutes * 60_000) {
       result.badges.push(`fast:${stage.id}`);
     }
-    if (stage.quiz.length > 0 && correct === stage.quiz.length) result.badges.push(`perfect:${stage.id}`);
+    if (complete && stage.quiz.length > 0 && correct === stage.quiz.length) result.badges.push(`perfect:${stage.id}`);
   }
   if (STAGES.every((s) => result.stages[s.id].complete)) result.badges.push('finisher');
   // The organiser's manual additions and deductions; the total never goes below zero.
@@ -90,3 +99,10 @@ export const isCharacter = (id: unknown): id is (typeof CHARACTERS)[number]['id'
 export const correctIndex = (stageId: string, questionId: string): number | undefined => ANSWERS[`${stageId}:${questionId}`];
 
 export const badgeLabel = (id: string) => BADGES[id]?.label ?? id;
+
+/** Highest points first; ties go to more correct answers, then to whoever finished sooner, then by name. */
+export const byRank = <T extends { s: Score; name: string }>(a: T, b: T) =>
+  b.s.points - a.s.points ||
+  b.s.correct - a.s.correct ||
+  (a.s.lastAt ?? Infinity) - (b.s.lastAt ?? Infinity) ||
+  a.name.localeCompare(b.name, 'fa');

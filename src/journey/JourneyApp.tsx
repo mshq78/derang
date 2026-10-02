@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ChevronLeft, Lock, LogOut, Trophy, WifiOff } from 'lucide-react';
 import { useContent } from '../context/ContentContext';
-import { STAGES } from '../data/journey';
+import { BADGES, STAGES } from '../data/journey';
 import { bodyTaskId, fetchTripState, flushOutbox, loadOutbox, type TripState } from '../lib/trip';
 import { OfflineCard, type OfflineItem } from './OfflineCard';
 import type { AuthUser } from '../lib/userAuth';
@@ -310,9 +310,12 @@ export const JourneyApp: React.FC<{
                   <h3 className="mb-2 flex items-center gap-1.5 text-sm font-extrabold text-ink"><Trophy className="h-4 w-4 text-primary" /> جدول امتیاز</h3>
                   <ol className="space-y-1.5">
                     {(state.top ?? []).map((t) => (
-                      <li key={t.rank} className="flex items-center justify-between text-[13px]">
-                        <span className="font-bold text-ink">{toPersianDigits(t.rank)}. {t.name}</span>
-                        <span className="text-ink-3">{toPersianDigits(t.points)} امتیاز</span>
+                      <li key={t.rank} className={cx('flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-[13px]', t.me && 'bg-primary-soft')}>
+                        <span className="min-w-0 truncate font-bold text-ink">{toPersianDigits(t.rank)}. {t.name}</span>
+                        <span className="flex-shrink-0 text-ink-3">
+                          {t.badges > 0 && <span className="ml-2">🏅 {toPersianDigits(t.badges)}</span>}
+                          {toPersianDigits(t.points)} امتیاز
+                        </span>
                       </li>
                     ))}
                   </ol>
@@ -320,6 +323,21 @@ export const JourneyApp: React.FC<{
                     <p className="mt-3 rounded-xl bg-primary-soft px-3 py-2 text-[13px] font-bold text-primary">
                       جایگاه شما: {toPersianDigits(state.me.rank ?? '-')} از {toPersianDigits(state.me.of)} · {toPersianDigits(state.me.points)} امتیاز
                     </p>
+                  )}
+                </section>
+
+                <section className="rounded-2xl border border-line bg-surface p-4">
+                  <h3 className="mb-2 text-sm font-extrabold text-ink">نشان‌های شما</h3>
+                  {(state.me?.badges ?? []).length === 0 ? (
+                    <p className="text-[13px] text-ink-3">هنوز نشانی نگرفته‌اید؛ با کامل کردن مرحله‌ها و جواب درست به سؤال‌ها نشان می‌گیرید.</p>
+                  ) : (
+                    <ul className="flex flex-wrap gap-1.5">
+                      {(state.me?.badges ?? []).map((b) => (
+                        <li key={b} title={BADGES[b]?.desc} className="rounded-full bg-primary-soft px-2.5 py-1 text-xs font-bold text-primary">
+                          🏅 {BADGES[b]?.label ?? b}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </section>
               </>

@@ -30,7 +30,7 @@ export interface TripState {
     badges: string[];
     stages: Record<string, StageScoreView>;
   } | null;
-  top?: { rank: number; name: string; points: number; badges: number }[];
+  top?: { rank: number; name: string; points: number; badges: number; me?: boolean }[];
 }
 
 export const fetchTripState = () => authFetch<TripState>('/trip/state');

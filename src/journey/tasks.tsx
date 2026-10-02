@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, ExternalLink, XCircle } from 'lucide-react';
-import { CHARACTERS, type QuizQuestion } from '../data/journey';
+import { CHARACTERS, POINTS, type QuizQuestion } from '../data/journey';
 import type { Person, TourSlide } from '../types/content';
 import { TourModal } from '../components/TourModal';
 import { CardViewer } from '../components/CardViewer';
@@ -205,8 +205,10 @@ export const Quiz: React.FC<{
   stageId: string;
   questions: QuizQuestion[];
   done: Record<string, TripTaskDone>;
+  /** Whether the parts above are finished; until then the answers are saved but not counted. */
+  counted: boolean;
   onAnswered: () => void;
-}> = ({ stageId, questions, done, onAnswered }) => {
+}> = ({ stageId, questions, done, counted, onAnswered }) => {
   const [local, setLocal] = useState<Record<string, Answered>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -244,8 +246,13 @@ export const Quiz: React.FC<{
     <div className="space-y-4 rounded-2xl border border-line bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-bold text-ink">سؤال‌های امتیازی</p>
-        <span className="text-xs text-ink-3">{toPersianDigits(answeredCount)} از {toPersianDigits(total)} · هر پاسخ درست ۱۰ امتیاز</span>
+        <span className="text-xs text-ink-3">{toPersianDigits(answeredCount)} از {toPersianDigits(total)} · هر پاسخ درست {toPersianDigits(POINTS.quiz)} امتیاز</span>
       </div>
+      {!counted && (
+        <p className="rounded-xl bg-warning-soft px-3 py-2 text-[13px] font-bold text-warning-ink">
+          امتیاز سؤال‌ها وقتی حساب می‌شود که بخش‌های بالای همین مرحله را انجام داده باشید.
+        </p>
+      )}
       {questions.map((q, qi) => {
         const res = result(q);
         return (
@@ -281,7 +288,7 @@ export const Quiz: React.FC<{
                 role="status"
                 className={cx('rounded-xl px-3 py-2.5 text-[13px] leading-relaxed', res.correct ? 'bg-success-soft text-success-ink' : 'bg-danger-soft text-danger-ink')}
               >
-                <p className="font-extrabold">{res.correct ? 'آفرین! درست بود (+۱۰ امتیاز)' : 'این بار درست نبود؛ نگران نباشید، یاد گرفتن همین است.'}</p>
+                <p className="font-extrabold">{res.correct ? `آفرین! درست بود${counted ? ` (+${toPersianDigits(POINTS.quiz)} امتیاز)` : ''}` : 'این بار درست نبود؛ نگران نباشید، یاد گرفتن همین است.'}</p>
                 {!res.correct && <p className="mt-1 font-bold">پاسخ درست: {q.options[res.correctIndex]}</p>}
                 {res.why && <p className="mt-1 font-normal">{res.why}</p>}
               </div>
@@ -291,7 +298,7 @@ export const Quiz: React.FC<{
       })}
       {answeredCount === total && (
         <p className="rounded-xl bg-primary-soft px-3 py-2 text-center text-[13px] font-extrabold text-primary">
-          {toPersianDigits(rightCount)} پاسخ درست از {toPersianDigits(total)} · {toPersianDigits(rightCount * 10)} امتیاز
+          {toPersianDigits(rightCount)} پاسخ درست از {toPersianDigits(total)} · {counted ? `${toPersianDigits(rightCount * POINTS.quiz)} امتیاز` : 'امتیاز پس از تکمیل بخش‌های بالا حساب می‌شود'}
         </p>
       )}
       {error && <p role="alert" className="text-[13px] font-bold text-danger-ink">{error}</p>}
