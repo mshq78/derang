@@ -19,7 +19,14 @@ export interface CompressResult {
   compressed: boolean;
 }
 
-export async function compressImage(file: File): Promise<CompressResult> {
+export interface CompressOptions {
+  maxSide?: number;
+  quality?: number;
+}
+
+export async function compressImage(file: File, options: CompressOptions = {}): Promise<CompressResult> {
+  const maxSide = options.maxSide ?? MAX_SIDE;
+  const quality = options.quality ?? QUALITY;
   const unchanged = { file, originalSize: file.size, compressed: false };
   if (!COMPRESSIBLE.test(file.type) || typeof createImageBitmap !== 'function') return unchanged;
 
@@ -30,7 +37,7 @@ export async function compressImage(file: File): Promise<CompressResult> {
     return unchanged; // Undecodable here; let the server-side type check decide.
   }
 
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const width = Math.max(1, Math.round(bitmap.width * scale));
   const height = Math.max(1, Math.round(bitmap.height * scale));
 
@@ -47,8 +54,8 @@ export async function compressImage(file: File): Promise<CompressResult> {
   bitmap.close();
 
   // Safari before 17 cannot encode WebP and silently returns PNG; fall back to JPEG.
-  let blob = await canvasToBlob(canvas, 'image/webp', QUALITY);
-  if (!blob || blob.type !== 'image/webp') blob = await canvasToBlob(canvas, 'image/jpeg', QUALITY);
+  let blob = await canvasToBlob(canvas, 'image/webp', quality);
+  if (!blob || blob.type !== 'image/webp') blob = await canvasToBlob(canvas, 'image/jpeg', quality);
   if (!blob) return unchanged;
 
   // Keep the original when re-encoding would not make it smaller.

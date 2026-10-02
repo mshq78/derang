@@ -38,6 +38,7 @@ import { MembersPage } from './pages/Members';
 import { StaffPage } from './pages/Staff';
 import { AuditPage } from './pages/Audit';
 import { TripPage } from './pages/Trip';
+import { CardOptimizer } from './CardOptimizer';
 import type { CollectionName } from '../types/content';
 
 export type Section =
@@ -213,6 +214,7 @@ export const AdminConsole: React.FC<{ onBackToApp: () => void }> = ({ onBackToAp
           <p className="mb-5 text-[13px] text-ink-3">
             {can('content.write') ? 'افزودن، ویرایش، ترتیب‌دهی و انتشار.' : 'فقط مشاهده؛ نقش شما اجازه‌ی ویرایش ندارد.'}
           </p>
+          {id === 'people' && can('content.write') && <CardOptimizer />}
           <AdminPanel
             key={id}
             onBackToApp={onBackToApp}

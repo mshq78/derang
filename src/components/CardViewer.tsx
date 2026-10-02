@@ -30,6 +30,7 @@ const Face: React.FC<{ url: string; alt: string; back?: boolean }> = ({ url, alt
       src={url}
       alt={alt}
       decoding="async"
+      fetchPriority="high"
       className="max-h-full max-w-full rounded-2xl object-contain"
       style={{ filter: 'drop-shadow(0 18px 40px rgba(0,0,0,0.45))' }}
     />
