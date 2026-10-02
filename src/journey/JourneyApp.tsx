@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Award, CheckCircle2, ChevronLeft, Lock, LogOut, Trophy, WifiOff } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Lock, LogOut, Trophy, WifiOff } from 'lucide-react';
 import { useContent } from '../context/ContentContext';
-import { BADGES, STAGES } from '../data/journey';
+import { STAGES } from '../data/journey';
 import { bodyTaskId, fetchTripState, flushOutbox, loadOutbox, type TripState } from '../lib/trip';
 import { OfflineCard, type OfflineItem } from './OfflineCard';
 import type { AuthUser } from '../lib/userAuth';
@@ -232,7 +232,7 @@ export const JourneyApp: React.FC<{
                 <div className="mt-2 space-y-3 text-center">
                   <p className="text-base font-extrabold text-ink">به سفر درنگ خوش آمدید</p>
                   <p className="text-[13px] leading-relaxed text-ink-3">
-                    در این مسیر، هر مرحله که باز شود یک کار کوتاه دارد. هرچه کارها را انجام دهید امتیاز و نشان می‌گیرید.
+                    در این مسیر، هر مرحله که باز شود یک کار کوتاه دارد. هرچه کارها را انجام دهید امتیاز می‌گیرید.
                   </p>
                   <button type="button" onClick={board} className="w-full rounded-2xl bg-primary py-3 text-sm font-extrabold text-surface shadow-md active:scale-[0.98]">
                     سوار شدم؛ شروع سفر
@@ -312,21 +312,6 @@ export const JourneyApp: React.FC<{
                     <p className="mt-3 rounded-xl bg-primary-soft px-3 py-2 text-[13px] font-bold text-primary">
                       جایگاه شما: {toPersianDigits(state.me.rank ?? '-')} از {toPersianDigits(state.me.of)} · {toPersianDigits(state.me.points)} امتیاز
                     </p>
-                  )}
-                </section>
-
-                <section className="rounded-2xl border border-line bg-surface p-4">
-                  <h3 className="mb-2 flex items-center gap-1.5 text-sm font-extrabold text-ink"><Award className="h-4 w-4 text-primary" /> نشان‌های شما</h3>
-                  {(state.me?.badges.length ?? 0) === 0 ? (
-                    <p className="text-[13px] text-ink-3">هنوز نشانی نگرفته‌اید. مرحله‌ها را زود انجام دهید، هر دو را ببینید و درست جواب بدهید.</p>
-                  ) : (
-                    <ul className="flex flex-wrap gap-2">
-                      {[...new Set(state.me!.badges)].map((b) => (
-                        <li key={b} title={BADGES[b]?.desc} className="rounded-full bg-accent-soft px-3 py-1 text-xs font-bold text-accent-ink">
-                          {BADGES[b]?.label ?? b}
-                        </li>
-                      ))}
-                    </ul>
                   )}
                 </section>
               </>

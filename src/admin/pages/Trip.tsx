@@ -143,7 +143,6 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
                     </span>
                     <span className="flex flex-shrink-0 items-center gap-3 text-xs text-ink-3">
                       <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />{toPersianDigits(m.stagesDone)}</span>
-                      <span>{toPersianDigits(m.badges)} نشان</span>
                       <span className="font-extrabold text-ink">{toPersianDigits(m.points)}</span>
                       <Button variant="ghost" className="px-2 py-1" onClick={() => setAdjusting(m)}>امتیاز ±</Button>
                     </span>
