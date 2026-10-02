@@ -6,7 +6,8 @@ import type { SiteSettings } from '../types/content';
 import { completeTripTask, type TripState } from '../lib/trip';
 import { TrackedAudio } from './TrackedAudio';
 import { TrackedVideo } from './TrackedVideo';
-import { CardsTask, Quiz, TestTask } from './tasks';
+import { JOURNEY_TEXTS } from '../data/journeyTexts';
+import { CardsTask, Quiz, TextPanel, TestTask } from './tasks';
 
 interface ContentSlice {
   site: SiteSettings;
@@ -73,7 +74,7 @@ export const StageView: React.FC<{
               <div key={group.id} className="space-y-2">
                 {group.items.length > 1 && (
                   <p className="text-xs text-ink-3">
-                    {group.title}: صوت یا ویدیو را ببینید؛ اگر هر دو را انجام دهید امتیاز بیشتری می‌گیرید.
+                    {group.title}: صوت یا ویدیو را ببینید (یا متن را بخوانید)؛ اگر هر دو، صوت و ویدیو را انجام دهید، امتیاز بیشتری می‌گیرید.
                     {doneCount > 0 ? '' : ''}
                   </p>
                 )}
@@ -101,6 +102,13 @@ export const StageView: React.FC<{
                       onFinished={report({ stageId: stage.id, groupId: group.id, key: 'video' })}
                     />
                   )
+                )}
+                {group.text && JOURNEY_TEXTS[group.id] && (
+                  <TextPanel
+                    text={JOURNEY_TEXTS[group.id]}
+                    done={!!done[taskId.media(stage.id, group.id, 'text')]}
+                    onFinished={report({ stageId: stage.id, groupId: group.id, key: 'text' })}
+                  />
                 )}
               </div>
             );

@@ -23,8 +23,10 @@ export interface Score {
 
 const groupFirstDone = (stage: StageDef, rows: Map<string, TaskRow>) =>
   stage.groups.map((g) => {
-    const done = g.items.map((i) => rows.get(taskId.media(stage.id, g.id, i.key))).filter(Boolean) as TaskRow[];
-    return { group: g, done };
+    const media = g.items.map((i) => rows.get(taskId.media(stage.id, g.id, i.key))).filter(Boolean) as TaskRow[];
+    const text = g.text ? rows.get(taskId.media(stage.id, g.id, 'text')) : undefined;
+    // Reading the text counts as one way to finish the part; the bonus needs both audio and video.
+    return { group: g, done: text ? [...media, text] : media, mediaDone: media.length };
   });
 
 /** Pure scoring: points and badges from a member's task rows and the stage opening times (epoch ms). */
@@ -37,14 +39,14 @@ export function score(rowsList: TaskRow[], opened: Record<string, number>): Scor
     const partTimes: number[] = [];
     let allParts = true;
 
-    for (const { group, done } of groupFirstDone(stage, rows)) {
+    for (const { group, done, mediaDone } of groupFirstDone(stage, rows)) {
       if (done.length === 0) {
         allParts = false;
         continue;
       }
-      points += group.base + (done.length > 1 ? group.bonus : 0);
+      points += group.base + (mediaDone > 1 ? group.bonus : 0);
       partTimes.push(Math.min(...done.map((d) => d.done_at)));
-      if (done.length > 1 && group.bonus > 0) result.badges.push(`both:${stage.id}`);
+      if (mediaDone > 1 && group.bonus > 0) result.badges.push(`both:${stage.id}`);
     }
     for (const special of stage.special ?? []) {
       const row = rows.get(special === 'test' ? taskId.test : taskId.cards);

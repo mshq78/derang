@@ -240,3 +240,63 @@ export const Quiz: React.FC<{
     </div>
   );
 };
+
+const HEADING = /^[A-Za-z]+(?: — .+)?$/;
+
+/** The written version of a part. Reading it for a while counts as finishing the part. */
+export const TextPanel: React.FC<{
+  text: string;
+  done: boolean;
+  onFinished: () => void;
+}> = ({ text, done, onFinished }) => {
+  const [open, setOpen] = useState(false);
+  const words = text.split(/\s+/).length;
+  const needed = Math.min(180, Math.max(45, Math.round((words / 200) * 60 * 0.5)));
+  const [left, setLeft] = useState(needed);
+
+  useEffect(() => {
+    if (!open || done || left <= 0) return;
+    const t = setInterval(() => setLeft((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [open, done, left]);
+
+  const paragraphs = text.split(/\n\s*\n/);
+  return (
+    <div className="rounded-2xl border border-line bg-surface">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 p-4 text-right"
+      >
+        <span className="text-sm font-bold text-ink">نسخه‌ی متنی {done && <span className="text-xs text-success-ink">· انجام شد</span>}</span>
+        <span className="text-xs font-bold text-primary">{open ? 'بستن' : 'خواندن متن'}</span>
+      </button>
+      {open && (
+        <div className="space-y-3 border-t border-line px-4 pb-4 pt-3">
+          <p className="text-xs text-ink-3">اگر نتوانستید صوت یا ویدیو را پخش کنید، متن را بخوانید؛ خواندن متن هم به حساب می‌آید.</p>
+          <div className="space-y-3 text-[15px] leading-8 text-ink">
+            {paragraphs.map((p, i) => {
+              const line = p.trim();
+              return HEADING.test(line) || /^[A-Za-z]+ — [^\n]{1,30}$/.test(line) ? (
+                <h4 key={i} className="pt-2 text-sm font-extrabold text-primary" dir="rtl">{line}</h4>
+              ) : (
+                <p key={i}>{line}</p>
+              );
+            })}
+          </div>
+          {!done && (
+            <button
+              type="button"
+              disabled={left > 0}
+              onClick={onFinished}
+              className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-surface disabled:opacity-50"
+            >
+              {left > 0 ? `متن را خواندم (${toPersianDigits(left)} ثانیه‌ی دیگر)` : 'متن را خواندم'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};

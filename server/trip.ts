@@ -103,8 +103,9 @@ export async function completeTask(user: PublicUser, body: unknown) {
   }
   const group = stage.groups.find((g) => g.id === groupId);
   const item = group?.items.find((i) => i.key === key);
-  if (!group || !item) throw badRequest('کار نامعتبر است.');
-  await record(user, taskId.media(stage.id, group.id, item.key));
+  const isText = key === 'text' && group?.text === true;
+  if (!group || (!item && !isText)) throw badRequest('کار نامعتبر است.');
+  await record(user, taskId.media(stage.id, group.id, isText ? 'text' : item!.key));
   return { ok: true };
 }
 

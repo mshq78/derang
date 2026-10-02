@@ -21,6 +21,8 @@ export interface MediaGroup {
   base: number;
   bonus: number;
   items: MediaItem[];
+  /** A written version exists (JOURNEY_TEXTS[id]); reading it counts like listening or watching. */
+  text?: boolean;
 }
 
 export interface QuizQuestion {
@@ -67,7 +69,7 @@ export const STAGES: StageDef[] = [
     subtitle: 'صوت مدل PERIMETERS',
     fastMinutes: 25,
     groups: [
-      { id: 'perimeters', title: 'مدل PERIMETERS', base: 100, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'perimeters_audio' } }] },
+      { id: 'perimeters', title: 'مدل PERIMETERS', base: 100, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'perimeters_audio' } }], text: true },
     ],
     quiz: [
       {
@@ -126,7 +128,7 @@ export const STAGES: StageDef[] = [
         items: [
           { key: 'audio', ref: { source: 'story', id: 'isfahan1' } },
           { key: 'video', ref: { source: 'video', titleIncludes: 'اصفهان ۱' } },
-        ],
+        ], text: true,
       },
     ],
     quiz: [
@@ -176,7 +178,7 @@ export const STAGES: StageDef[] = [
         items: [
           { key: 'audio', ref: { source: 'story', id: 'trabant' } },
           { key: 'video', ref: { source: 'video', titleIncludes: 'ترابانت' } },
-        ],
+        ], text: true,
       },
     ],
     quiz: [
@@ -236,7 +238,7 @@ export const STAGES: StageDef[] = [
         items: [
           { key: 'audio', ref: { source: 'story', id: 'titan' } },
           { key: 'video', ref: { source: 'video', titleIncludes: 'تایتان' } },
-        ],
+        ], text: true,
       },
       {
         id: 'paloalto',
@@ -246,7 +248,7 @@ export const STAGES: StageDef[] = [
         items: [
           { key: 'audio', ref: { source: 'story', id: 'paloalto' } },
           { key: 'video', ref: { source: 'video', titleIncludes: 'پالو آلتو' } },
-        ],
+        ], text: true,
       },
     ],
     quiz: [
@@ -298,7 +300,7 @@ export const STAGES: StageDef[] = [
     subtitle: 'صوت تحلیل سقوط با لنز PERIMETERS',
     fastMinutes: 20,
     groups: [
-      { id: 'isfahan2', title: 'اصفهان ۲', base: 100, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'isfahan2' } }] },
+      { id: 'isfahan2', title: 'اصفهان ۲', base: 100, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'isfahan2' } }], text: true },
     ],
     quiz: [
       {
