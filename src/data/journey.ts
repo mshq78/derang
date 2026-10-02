@@ -125,7 +125,7 @@ export const STAGES: StageDef[] = [
         bonus: 30,
         items: [
           { key: 'audio', ref: { source: 'story', id: 'isfahan1' } },
-          { key: 'video', ref: { source: 'video', id: 'video-sultan-hussein' } },
+          { key: 'video', ref: { source: 'video', titleIncludes: 'اصفهان ۱' } },
         ],
       },
     ],
@@ -228,8 +228,26 @@ export const STAGES: StageDef[] = [
     subtitle: 'دو صوت: تایتان و ترانوس (پالو آلتو)',
     fastMinutes: 40,
     groups: [
-      { id: 'titan', title: 'تایتان', base: 80, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'titan' } }] },
-      { id: 'paloalto', title: 'پالو آلتو', base: 80, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'paloalto' } }] },
+      {
+        id: 'titan',
+        title: 'تایتان',
+        base: 80,
+        bonus: 20,
+        items: [
+          { key: 'audio', ref: { source: 'story', id: 'titan' } },
+          { key: 'video', ref: { source: 'video', titleIncludes: 'تایتان' } },
+        ],
+      },
+      {
+        id: 'paloalto',
+        title: 'پالو آلتو',
+        base: 80,
+        bonus: 20,
+        items: [
+          { key: 'audio', ref: { source: 'story', id: 'paloalto' } },
+          { key: 'video', ref: { source: 'video', titleIncludes: 'پالو آلتو' } },
+        ],
+      },
     ],
     quiz: [
       {
@@ -337,6 +355,7 @@ export const BADGES: Record<string, { label: string; desc: string }> = {
   'fast:s6': { label: 'پیشگام پایان‌سفر', desc: 'مرحله‌ی آخر را زود انجام دادید' },
   'both:s3': { label: 'هم دیدم، هم شنیدم (اصفهان)', desc: 'ویدیو و صوت اصفهان ۱ را هر دو انجام دادید' },
   'both:s4': { label: 'هم دیدم، هم شنیدم (ترابانت)', desc: 'ویدیو و صوت ترابانت را هر دو انجام دادید' },
+  'both:s5': { label: 'هم دیدم، هم شنیدم (تایتان و پالو آلتو)', desc: 'ویدیو و صوت هر دو را انجام دادید' },
   'perfect:s2': { label: 'نمره‌ی کامل: دام‌ها', desc: 'همه‌ی پاسخ‌های مرحله‌ی PERIMETERS درست بود' },
   'perfect:s3': { label: 'نمره‌ی کامل: اصفهان', desc: 'همه‌ی پاسخ‌های اصفهان ۱ درست بود' },
   'perfect:s4': { label: 'نمره‌ی کامل: ترابانت', desc: 'همه‌ی پاسخ‌های ترابانت درست بود' },

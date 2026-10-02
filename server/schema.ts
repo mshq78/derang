@@ -149,12 +149,69 @@ async function init(): Promise<void> {
   await migrate();
 }
 
+/** Runs a named data fix once per database (recorded in the `migrations` table). */
+async function once(name: string, run: () => Promise<void>): Promise<void> {
+  const db = getDb();
+  const [first] = await db.query('INSERT INTO migrations (id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING id', [name]);
+  if (!first) return;
+  try {
+    await run();
+  } catch (err) {
+    await db.query('DELETE FROM migrations WHERE id = $1', [name]); // try again on the next start
+    throw err;
+  }
+}
+
+const TRIP_VIDEOS = [
+  { id: 'video-isfahan1', title: 'اصفهان ۱؛ پیش از سقوط پایتخت', url: 'https://www.aparat.com/v/pbqat3z', desc: 'اصفهان ۱۷۲۲؛ نشانه‌هایی که سال‌ها پیش از سقوط دیده نشدند.' },
+  { id: 'video-trabant', title: 'ترابانت؛ خودرویی که منجمد شد', url: 'https://www.aparat.com/v/rkca7e5', desc: 'داستان ترابانت و هر «فعلاً نه» که هزینه‌اش را به آینده منتقل کرد.' },
+  { id: 'video-titan', title: 'تایتان؛ زیردریایی که هشدارها را نشنید', url: 'https://www.aparat.com/v/kaw75kb', desc: 'منیت، ریسک و هویت در حادثه‌ی زیردریایی تایتان.' },
+  { id: 'video-paloalto', title: 'پالو آلتو؛ داستانی که واقعیت را کنار زد', url: 'https://www.aparat.com/v/wxehs4a', desc: 'اخلاق، روایت و روابط در ماجرای ترانوس.' },
+];
+
+async function runOnceMigrations(): Promise<void> {
+  const db = getDb();
+  await db.query('CREATE TABLE IF NOT EXISTS migrations (id text PRIMARY KEY, at timestamptz NOT NULL DEFAULT now())');
+  await once('2026-10-trip-videos', async () => {
+    // The humorous opening animation is reserved for the live event: it must not be on the site.
+    await db.query(`UPDATE content_items SET is_published = false WHERE collection = 'videos' AND id = 'video-sultan-hussein'`);
+    let order = 100;
+    for (const v of TRIP_VIDEOS) {
+      order += 10;
+      await db.query(
+        `INSERT INTO content_items (collection, id, sort_order, is_published, data)
+         VALUES ('videos', $1, $2, true, $3::jsonb) ON CONFLICT (collection, id) DO NOTHING`,
+        [
+          v.id,
+          order,
+          JSON.stringify({
+            title: v.title,
+            badge: 'ویدیوی تحلیلی',
+            desc: v.desc,
+            videoUrl: v.url,
+            quote: '',
+            reflectionQuestion: '',
+            whyImportant: '',
+            showOnStories: true,
+          }),
+        ]
+      );
+    }
+    await db.query(
+      `INSERT INTO content_meta (id, version, updated_at) VALUES (1, $1, now())
+       ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version, updated_at = now()`,
+      [`mig-${Date.now().toString(36)}`]
+    );
+  });
+}
+
 /** One-off data fixes. Each only touches rows still holding the old value. */
 async function migrate(): Promise<void> {
   const [probe] = await getDb().query(`SELECT to_regclass('public.audit_log_at_idx') AS done`);
   if (!probe?.done) {
     for (const statement of ADMIN_SCHEMA) await getDb().query(statement);
   }
+  await runOnceMigrations();
   const [tripProbe] = await getDb().query(`SELECT to_regclass('public.trip_progress_done_idx') AS done`);
   if (!tripProbe?.done) {
     for (const statement of TRIP_SCHEMA) await getDb().query(statement);
