@@ -9,6 +9,7 @@ import {
   verifyLoginCode,
 } from '../lib/userAuth';
 import { toPersianDigits } from '../utils/helpers';
+import { BrandMark } from './BrandMark';
 import { maskPhone, normalizeIranMobile, toLatinDigits } from '../utils/phone';
 
 interface LoginScreenProps {
@@ -160,9 +161,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ brandName, orgName, sm
     <div className="flex min-h-screen items-center justify-center bg-canvas p-4 text-right">
       <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 sm:p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-2xl font-extrabold text-surface shadow-sm">
-            {brandName.charAt(0) || 'د'}
-          </div>
+          <BrandMark className="mb-3 h-16 w-16" />
           <span className="mb-1 text-[13px] font-bold text-primary">{orgName}</span>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink">
             {step === 'profile' ? 'نام خود را بگویید' : `ورود یا ثبت‌نام در ${brandName}`}

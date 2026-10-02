@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Award, Bus, CheckCircle2, ChevronLeft, Lock, LogOut, Trophy, WifiOff } from 'lucide-react';
+import { Award, CheckCircle2, ChevronLeft, Lock, LogOut, Trophy, WifiOff } from 'lucide-react';
 import { useContent } from '../context/ContentContext';
 import { BADGES, STAGES } from '../data/journey';
 import { bodyTaskId, fetchTripState, flushOutbox, loadOutbox, type TripState } from '../lib/trip';
@@ -7,6 +7,7 @@ import { OfflineCard, type OfflineItem } from './OfflineCard';
 import type { AuthUser } from '../lib/userAuth';
 import { toPersianDigits } from '../utils/helpers';
 import { cx } from '../admin/ui';
+import { BrandMark } from '../components/BrandMark';
 import { RouteMap } from './RouteMap';
 import { StageView } from './StageView';
 
@@ -171,7 +172,7 @@ export const JourneyApp: React.FC<{
       <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-2 px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-surface"><Bus className="h-4 w-4" /></span>
+            <BrandMark className="h-8 w-8" />
             <div>
               <p className="text-sm font-extrabold text-ink">درنگ؛ سفر اصفهان تا بابلسر</p>
               <p className="text-xs text-ink-3">{user.firstName} {user.lastName}</p>

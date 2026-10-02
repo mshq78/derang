@@ -65,6 +65,7 @@ import { ContentProvider, useContent } from './context/ContentContext';
 import { AuthGate } from './AuthGate';
 import type { AppShellProps } from './AuthGate';
 import { FarewellScreen } from './components/FarewellScreen';
+import { BrandMark } from './components/BrandMark';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { ArchetypeCard } from './components/ArchetypeCard';
@@ -801,9 +802,7 @@ function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps)
       <div className="flex min-h-screen items-center justify-center bg-canvas p-4 text-right">
         <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 sm:p-8 shadow-sm">
           <div className="flex flex-col items-center text-center mb-6">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-surface font-black text-2xl shadow-sm mb-3">
-              {content.site.brandName.charAt(0) || 'د'}
-            </div>
+            <BrandMark className="mb-3 h-16 w-16" />
             <span className="text-[13px] font-bold text-primary mb-1">
               {content.site.orgName}
             </span>

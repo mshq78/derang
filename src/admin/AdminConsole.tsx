@@ -29,6 +29,7 @@ import {
 import { toPersianDigits } from '../utils/helpers';
 import { adminLogin, adminLogout, getAdminToken } from '../lib/api';
 import { AdminPanel } from '../components/AdminPanel';
+import { BrandMark } from '../components/BrandMark';
 import { fetchMe, type AdminIdentity, type Permission } from './api';
 import { Button, ErrorNote, Spinner, cx, errorText, inputClass } from './ui';
 import { DashboardPage } from './pages/Dashboard';
@@ -224,7 +225,7 @@ export const AdminConsole: React.FC<{ onBackToApp: () => void }> = ({ onBackToAp
   const sidebar = (
     <nav aria-label="منوی مدیریت" className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-4 py-4">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-surface"><ShieldCheck className="h-5 w-5" /></span>
+        <BrandMark className="h-9 w-9" />
         <div>
           <p className="text-sm font-extrabold text-ink">پنل مدیریت درنگ</p>
           <p className="text-xs text-ink-3">{ROLE_LABELS[me.role] ?? me.role}</p>
@@ -354,7 +355,7 @@ const SignIn: React.FC<{ initialError: string | null; onBackToApp: () => void; o
     <div className="flex min-h-screen items-center justify-center bg-canvas p-4 text-right">
       <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-3xl border border-line bg-surface p-6 shadow-md sm:p-8">
         <div className="flex flex-col items-center text-center">
-          <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary"><ShieldCheck className="h-7 w-7" /></span>
+          <BrandMark className="mb-3 h-16 w-16" />
           <h1 className="text-xl font-extrabold text-ink">ورود به پنل مدیریت</h1>
           <p className="mt-1 text-xs text-ink-3">با حساب مدیریتی خود وارد شوید.</p>
         </div>

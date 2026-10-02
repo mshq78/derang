@@ -1,3 +1,4 @@
+import { BrandMark } from './BrandMark';
 import React from 'react';
 import { HelpCircle, Settings, LogOut } from 'lucide-react';
 import { Screen } from '../types';
@@ -51,9 +52,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           className="flex items-center gap-2.5 text-right transition-opacity hover:opacity-80 focus-visible:rounded-lg"
           aria-label={`رفتن به صفحه اصلی ${brandName}`}
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-surface font-extrabold text-lg shadow-sm">
-            {brandName.charAt(0) || 'د'}
-          </div>
+          <BrandMark className="h-9 w-9" />
           <div className="flex flex-col">
             <span className="text-base font-extrabold tracking-tight text-ink leading-tight">
               {brandName}
