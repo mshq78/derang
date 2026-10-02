@@ -91,7 +91,7 @@ export async function tripState(user: PublicUser) {
         ];
       })
     ),
-    me: mine ? { points: mine.s.points, rank, of: scored.length, badges: mine.s.badges, stages: mine.s.stages } : null,
+    me: mine ? { points: mine.s.points, rank, of: scored.length, badges: mine.s.badges, badgePoints: mine.s.badgePoints, stages: mine.s.stages } : null,
     top: scored.slice(0, 10).map((x, i) => ({ rank: i + 1, name: x.m.name, points: x.s.points, badges: x.s.badges.length, me: x.m.id === user.id })),
   };
 }

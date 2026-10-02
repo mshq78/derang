@@ -20,6 +20,8 @@ export interface Score {
   stages: Record<string, StageScore>;
   badges: string[];
   /** Correct quiz answers in total and when the last stage was finished: tie-breakers on the board. */
+  /** Part of `points` that came from badges. */
+  badgePoints: number;
   correct: number;
   lastAt: number | null;
 }
@@ -39,7 +41,7 @@ const groupFirstDone = (stage: StageDef, rows: Map<string, TaskRow>) =>
 /** Pure scoring: points and badges from a member's task rows and the stage opening times (epoch ms). */
 export function score(rowsList: TaskRow[], opened: Record<string, number>, adjustment = 0): Score {
   const rows = new Map(rowsList.map((r) => [r.task_id, r]));
-  const result: Score = { points: 0, stages: {}, badges: [], correct: 0, lastAt: null };
+  const result: Score = { points: 0, stages: {}, badges: [], badgePoints: 0, correct: 0, lastAt: null };
 
   for (const stage of STAGES) {
     let points = 0;
@@ -88,6 +90,9 @@ export function score(rowsList: TaskRow[], opened: Record<string, number>, adjus
     if (complete && stage.quiz.length > 0 && correct === stage.quiz.length) result.badges.push(`perfect:${stage.id}`);
   }
   if (STAGES.every((s) => result.stages[s.id].complete)) result.badges.push('finisher');
+  // Each badge adds its own points, so a person can see what it was worth.
+  result.badgePoints = result.badges.reduce((sum, id) => sum + (BADGES[id]?.points ?? 0), 0);
+  result.points += result.badgePoints;
   // The organiser's manual additions and deductions; the total never goes below zero.
   result.points = Math.max(0, result.points + adjustment);
   return result;

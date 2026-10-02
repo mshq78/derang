@@ -28,6 +28,7 @@ export interface TripState {
     rank: number | null;
     of: number;
     badges: string[];
+    badgePoints?: number;
     stages: Record<string, StageScoreView>;
   } | null;
   top?: { rank: number; name: string; points: number; badges: number; me?: boolean }[];

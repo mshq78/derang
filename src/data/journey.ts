@@ -45,7 +45,7 @@ export interface StageDef {
   quiz: QuizQuestion[];
 }
 
-export const POINTS = { test: 60, cards: 60, quiz: 25 } as const;
+export const POINTS = { test: 5, cards: 5, quiz: 4 } as const;
 /** Finishing a part with the self-confirm button (no listening, watching or reading) earns this share of its points. */
 export const CONFIRM_SHARE = 0.4;
 
@@ -63,7 +63,7 @@ export const STAGES: StageDef[] = [
     title: 'جاگیری و آغاز',
     subtitle: 'معرفی درنگ، تست شخصیت تصمیم‌گیری و کارت پنج شخصیت',
     fastMinutes: 90,
-    groups: [{ id: 'intro', title: 'معرفی درنگ', base: 60, bonus: 0, items: [{ key: 'audio', ref: { source: 'intro' } }], tour: true }],
+    groups: [{ id: 'intro', title: 'معرفی درنگ', base: 5, bonus: 0, items: [{ key: 'audio', ref: { source: 'intro' } }], tour: true }],
     special: ['test', 'cards'],
     quiz: [],
   },
@@ -73,7 +73,7 @@ export const STAGES: StageDef[] = [
     subtitle: 'صوت مدل PERIMETERS',
     fastMinutes: 25,
     groups: [
-      { id: 'perimeters', title: 'مدل PERIMETERS', base: 100, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'perimeters_audio' } }], text: true },
+      { id: 'perimeters', title: 'مدل PERIMETERS', base: 8, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'perimeters_audio' } }], text: true },
     ],
     quiz: [
       {
@@ -127,8 +127,8 @@ export const STAGES: StageDef[] = [
       {
         id: 'isfahan1',
         title: 'اصفهان ۱',
-        base: 100,
-        bonus: 30,
+        base: 8,
+        bonus: 2,
         items: [
           { key: 'audio', ref: { source: 'story', id: 'isfahan1' } },
           { key: 'video', ref: { source: 'video', titleIncludes: 'اصفهان ۱' } },
@@ -177,8 +177,8 @@ export const STAGES: StageDef[] = [
       {
         id: 'trabant',
         title: 'ترابانت',
-        base: 100,
-        bonus: 30,
+        base: 8,
+        bonus: 2,
         items: [
           { key: 'audio', ref: { source: 'story', id: 'trabant' } },
           { key: 'video', ref: { source: 'video', titleIncludes: 'ترابانت' } },
@@ -237,8 +237,8 @@ export const STAGES: StageDef[] = [
       {
         id: 'titan',
         title: 'تایتان',
-        base: 80,
-        bonus: 20,
+        base: 8,
+        bonus: 2,
         items: [
           { key: 'audio', ref: { source: 'story', id: 'titan' } },
           { key: 'video', ref: { source: 'video', titleIncludes: 'تایتان' } },
@@ -247,8 +247,8 @@ export const STAGES: StageDef[] = [
       {
         id: 'paloalto',
         title: 'پالو آلتو',
-        base: 80,
-        bonus: 20,
+        base: 8,
+        bonus: 2,
         items: [
           { key: 'audio', ref: { source: 'story', id: 'paloalto' } },
           { key: 'video', ref: { source: 'video', titleIncludes: 'پالو آلتو' } },
@@ -304,7 +304,7 @@ export const STAGES: StageDef[] = [
     subtitle: 'صوت تحلیل سقوط با لنز PERIMETERS',
     fastMinutes: 20,
     groups: [
-      { id: 'isfahan2', title: 'اصفهان ۲', base: 100, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'isfahan2' } }], text: true },
+      { id: 'isfahan2', title: 'اصفهان ۲', base: 8, bonus: 0, items: [{ key: 'audio', ref: { source: 'story', id: 'isfahan2' } }], text: true },
     ],
     quiz: [
       {
@@ -351,22 +351,23 @@ export const STAGES: StageDef[] = [
   },
 ];
 
-export const BADGES: Record<string, { label: string; desc: string }> = {
-  finisher: { label: 'تا ایستگاه آخر', desc: 'هر شش مرحله را کامل کردید' },
-  'fast:s1': { label: 'اولین‌ها در جاگیری', desc: 'مرحله‌ی اول را در مهلت ویژه‌اش کامل کردید' },
-  'fast:s2': { label: 'اولین‌ها در PERIMETERS', desc: 'مرحله‌ی دوم را در مهلت ویژه‌اش کامل کردید' },
-  'fast:s3': { label: 'اولین‌ها در اصفهان ۱', desc: 'مرحله‌ی سوم را در مهلت ویژه‌اش کامل کردید' },
-  'fast:s4': { label: 'اولین‌ها در ترابانت', desc: 'مرحله‌ی چهارم را در مهلت ویژه‌اش کامل کردید' },
-  'fast:s5': { label: 'اولین‌ها در تایتان و پالو آلتو', desc: 'مرحله‌ی پنجم را در مهلت ویژه‌اش کامل کردید' },
-  'fast:s6': { label: 'اولین‌ها در اصفهان ۲', desc: 'مرحله‌ی ششم را در مهلت ویژه‌اش کامل کردید' },
-  'both:s3': { label: 'هر دو روایت: اصفهان ۱', desc: 'هم صوت و هم ویدیو را انجام دادید' },
-  'both:s4': { label: 'هر دو روایت: ترابانت', desc: 'هم صوت و هم ویدیو را انجام دادید' },
-  'both:s5': { label: 'هر دو روایت: تایتان و پالو آلتو', desc: 'هم صوت و هم ویدیو را انجام دادید' },
-  'perfect:s2': { label: 'بی‌غلط: PERIMETERS', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید' },
-  'perfect:s3': { label: 'بی‌غلط: اصفهان ۱', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید' },
-  'perfect:s4': { label: 'بی‌غلط: ترابانت', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید' },
-  'perfect:s5': { label: 'بی‌غلط: تایتان و پالو آلتو', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید' },
-  'perfect:s6': { label: 'بی‌غلط: اصفهان ۲', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید' },
+/** Badges also add points to the total; `points` is shown next to each badge. */
+export const BADGES: Record<string, { label: string; desc: string; points: number }> = {
+  finisher: { label: 'تا ایستگاه آخر', desc: 'هر شش مرحله را کامل کردید', points: 10 },
+  'fast:s1': { label: 'اولین‌ها در جاگیری', desc: 'مرحله‌ی اول را در مهلت ویژه‌اش کامل کردید', points: 2 },
+  'fast:s2': { label: 'اولین‌ها در PERIMETERS', desc: 'مرحله‌ی دوم را در مهلت ویژه‌اش کامل کردید', points: 2 },
+  'fast:s3': { label: 'اولین‌ها در اصفهان ۱', desc: 'مرحله‌ی سوم را در مهلت ویژه‌اش کامل کردید', points: 2 },
+  'fast:s4': { label: 'اولین‌ها در ترابانت', desc: 'مرحله‌ی چهارم را در مهلت ویژه‌اش کامل کردید', points: 2 },
+  'fast:s5': { label: 'اولین‌ها در تایتان و پالو آلتو', desc: 'مرحله‌ی پنجم را در مهلت ویژه‌اش کامل کردید', points: 2 },
+  'fast:s6': { label: 'اولین‌ها در اصفهان ۲', desc: 'مرحله‌ی ششم را در مهلت ویژه‌اش کامل کردید', points: 2 },
+  'both:s3': { label: 'هر دو روایت: اصفهان ۱', desc: 'هم صوت و هم ویدیو را انجام دادید', points: 2 },
+  'both:s4': { label: 'هر دو روایت: ترابانت', desc: 'هم صوت و هم ویدیو را انجام دادید', points: 2 },
+  'both:s5': { label: 'هر دو روایت: تایتان و پالو آلتو', desc: 'هم صوت و هم ویدیو را انجام دادید', points: 2 },
+  'perfect:s2': { label: 'بی‌غلط: PERIMETERS', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید', points: 4 },
+  'perfect:s3': { label: 'بی‌غلط: اصفهان ۱', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید', points: 4 },
+  'perfect:s4': { label: 'بی‌غلط: ترابانت', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید', points: 4 },
+  'perfect:s5': { label: 'بی‌غلط: تایتان و پالو آلتو', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید', points: 4 },
+  'perfect:s6': { label: 'بی‌غلط: اصفهان ۲', desc: 'همه‌ی سؤال‌های این مرحله را درست جواب دادید', points: 4 },
 };
 
 export const taskId = {

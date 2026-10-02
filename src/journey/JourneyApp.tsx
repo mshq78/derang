@@ -310,12 +310,10 @@ export const JourneyApp: React.FC<{
                   <h3 className="mb-2 flex items-center gap-1.5 text-sm font-extrabold text-ink"><Trophy className="h-4 w-4 text-primary" /> جدول امتیاز</h3>
                   <ol className="space-y-1.5">
                     {(state.top ?? []).map((t) => (
-                      <li key={t.rank} className={cx('flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-[13px]', t.me && 'bg-primary-soft')}>
-                        <span className="min-w-0 truncate font-bold text-ink">{toPersianDigits(t.rank)}. {t.name}</span>
-                        <span className="flex-shrink-0 text-ink-3">
-                          {t.badges > 0 && <span className="ml-2">🏅 {toPersianDigits(t.badges)}</span>}
-                          {toPersianDigits(t.points)} امتیاز
-                        </span>
+                      <li key={t.rank} className={cx('flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px]', t.me && 'bg-primary-soft')}>
+                        <span className="w-5 flex-shrink-0 text-center font-extrabold text-ink-3">{toPersianDigits(t.rank)}</span>
+                        <span className="min-w-0 flex-1 truncate font-bold text-ink">{t.name}</span>
+                        <span className="flex-shrink-0 font-extrabold text-primary">{toPersianDigits(t.points)}</span>
                       </li>
                     ))}
                   </ol>
@@ -327,14 +325,17 @@ export const JourneyApp: React.FC<{
                 </section>
 
                 <section className="rounded-2xl border border-line bg-surface p-4">
-                  <h3 className="mb-2 text-sm font-extrabold text-ink">نشان‌های شما</h3>
+                  <h3 className="mb-2 flex items-center justify-between text-sm font-extrabold text-ink">
+                    <span>نشان‌های شما</span>
+                    {(state.me?.badgePoints ?? 0) > 0 && <span className="text-xs text-primary">{toPersianDigits(state.me?.badgePoints ?? 0)} امتیاز از نشان‌ها</span>}
+                  </h3>
                   {(state.me?.badges ?? []).length === 0 ? (
                     <p className="text-[13px] text-ink-3">هنوز نشانی نگرفته‌اید؛ با کامل کردن مرحله‌ها و جواب درست به سؤال‌ها نشان می‌گیرید.</p>
                   ) : (
                     <ul className="flex flex-wrap gap-1.5">
                       {(state.me?.badges ?? []).map((b) => (
                         <li key={b} title={BADGES[b]?.desc} className="rounded-full bg-primary-soft px-2.5 py-1 text-xs font-bold text-primary">
-                          🏅 {BADGES[b]?.label ?? b}
+                          🏅 {BADGES[b]?.label ?? b} · <bdi>+{toPersianDigits(BADGES[b]?.points ?? 0)}</bdi>
                         </li>
                       ))}
                     </ul>
