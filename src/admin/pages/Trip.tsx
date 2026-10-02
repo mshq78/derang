@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Lock, Play, Undo2 } from 'lucide-react';
-import { fetchTrip, openNextTripStage, undoTripStage, type TripAdmin } from '../api';
-import { Badge, Button, Card, Dialog, ErrorNote, PageHeader, Spinner, cx, errorText } from '../ui';
+import { adjustTripPoints, fetchTrip, listPointAdjustments, openNextTripStage, undoTripStage, type PointAdjustment, type TripAdmin } from '../api';
+import { Badge, Button, Card, Dialog, ErrorNote, Field, PageHeader, Spinner, cx, errorText, formatDate, inputClass } from '../ui';
 import { toPersianDigits } from '../../utils/helpers';
 
 const POLL_MS = 8000;
@@ -15,6 +15,7 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<'open' | 'undo' | null>(null);
+  const [adjusting, setAdjusting] = useState<TripAdmin['members'][number] | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -144,6 +145,7 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
                       <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />{toPersianDigits(m.stagesDone)}</span>
                       <span>{toPersianDigits(m.badges)} نشان</span>
                       <span className="font-extrabold text-ink">{toPersianDigits(m.points)}</span>
+                      <Button variant="ghost" className="px-2 py-1" onClick={() => setAdjusting(m)}>امتیاز ±</Button>
                     </span>
                   </li>
                 ))}
@@ -153,6 +155,18 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
         </div>
       )}
 
+      {adjusting && (
+        <AdjustDialog
+          group={group}
+          member={adjusting}
+          onClose={() => setAdjusting(null)}
+          onDone={(updated) => {
+            setData(updated);
+            setAdjusting(null);
+            notify('امتیاز تغییر کرد.');
+          }}
+        />
+      )}
       {confirm === 'open' && next && (
         <Dialog
           title={nextIndex === 0 ? 'شروع سفر؟' : `باز کردن مرحله‌ی ${toPersianDigits(nextIndex + 1)}؟`}
@@ -174,5 +188,89 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
         </Dialog>
       )}
     </div>
+  );
+};
+
+const QUICK = [-50, -10, 10, 50];
+
+const AdjustDialog: React.FC<{
+  group: string;
+  member: TripAdmin['members'][number];
+  onClose: () => void;
+  onDone: (data: TripAdmin) => void;
+}> = ({ group, member, onClose, onDone }) => {
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<PointAdjustment[] | null>(null);
+
+  useEffect(() => {
+    listPointAdjustments(group, member.id).then(setHistory).catch(() => setHistory([]));
+  }, [group, member.id]);
+
+  const value = Number(amount.replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))));
+  const valid = amount.trim() !== '' && Number.isInteger(value) && value !== 0 && Math.abs(value) <= 10000;
+  const after = Math.max(0, member.points + (valid ? value : 0));
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onDone(await adjustTripPoints(group, member.id, value, reason));
+    } catch (err) {
+      setError(errorText(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      title={`امتیاز ${member.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>انصراف</Button>
+          <Button variant="primary" busy={busy} disabled={!valid} onClick={save}>
+            {valid ? (value > 0 ? `اضافه کردن ${toPersianDigits(value)}` : `کم کردن ${toPersianDigits(Math.abs(value))}`) : 'ثبت'}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-ink">
+        امتیاز فعلی: <span className="font-extrabold">{toPersianDigits(member.points)}</span>
+        {valid && <span className="text-ink-3"> ← بعد از ثبت: <span className="font-extrabold text-ink">{toPersianDigits(after)}</span></span>}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {QUICK.map((q) => (
+          <Button key={q} onClick={() => setAmount(String(q))} className={cx(q < 0 && 'text-danger-ink')}>
+            <bdi dir="ltr">{q > 0 ? `+${toPersianDigits(q)}` : `-${toPersianDigits(Math.abs(q))}`}</bdi>
+          </Button>
+        ))}
+      </div>
+      <Field label="مقدار (عدد مثبت برای اضافه، منفی برای کم)" hint="امتیاز هیچ‌وقت کمتر از صفر نمی‌شود.">
+        <input className={`${inputClass} text-left`} dir="ltr" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="مثلاً 25 یا -15" autoFocus />
+      </Field>
+      <Field label="دلیل (اختیاری، در گزارش فعالیت ثبت می‌شود)">
+        <input className={inputClass} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} />
+      </Field>
+      <ErrorNote message={error} />
+      {history && history.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-bold text-ink-2">تغییرهای قبلی</p>
+          <ul className="max-h-40 divide-y divide-line overflow-y-auto rounded-xl border border-line text-xs">
+            {history.map((h) => (
+              <li key={h.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                <span className="min-w-0 truncate text-ink-2">{h.reason || '—'} · {h.actor}</span>
+                <span className="flex-shrink-0">
+                  <bdi dir="ltr" className={cx('font-extrabold', h.delta > 0 ? 'text-success-ink' : 'text-danger-ink')}>{h.delta > 0 ? '+' : '-'}{toPersianDigits(Math.abs(h.delta))}</bdi>
+                  <span className="mr-2 text-ink-3">{formatDate(h.at)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Dialog>
   );
 };

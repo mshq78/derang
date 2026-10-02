@@ -174,6 +174,17 @@ const TRIP_VIDEOS = [
 async function runOnceMigrations(): Promise<void> {
   const db = getDb();
   await db.query('CREATE TABLE IF NOT EXISTS migrations (id text PRIMARY KEY, at timestamptz NOT NULL DEFAULT now())');
+  await once('2026-10-trip-adjustments', async () => {
+    await db.query(`CREATE TABLE IF NOT EXISTS trip_adjustments (
+      id bigserial PRIMARY KEY,
+      user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      delta integer NOT NULL,
+      reason text NOT NULL DEFAULT '',
+      actor text NOT NULL,
+      at timestamptz NOT NULL DEFAULT now()
+    )`);
+    await db.query('CREATE INDEX IF NOT EXISTS trip_adjustments_user_idx ON trip_adjustments (user_id)');
+  });
   await once('2026-10-trip-videos', async () => {
     // The humorous opening animation is reserved for the live event: it must not be on the site.
     await db.query(`UPDATE content_items SET is_published = false WHERE collection = 'videos' AND id = 'video-sultan-hussein'`);

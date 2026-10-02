@@ -2,7 +2,7 @@ import { audit, listAudit } from './audit.js';
 import { AdminSession, login, logout, publicAdmin, require as requirePermission, requireAdmin } from './auth.js';
 import { dashboard } from './dashboard.js';
 import { createMember, deleteMember, importMembers, listMembers, updateMember } from './people.js';
-import { adminTrip, answerQuestion, completeTask, isGroup, openNextStage, submitTest, tripState, undoLastOpen } from './trip.js';
+import { adjustPoints, adminTrip, answerQuestion, listAdjustments, completeTask, isGroup, openNextStage, submitTest, tripState, undoLastOpen } from './trip.js';
 import { createStaff, deleteStaff, listStaff, updateStaff } from './staff.js';
 import {
   createItem,
@@ -348,6 +348,16 @@ async function adminTripRoute(request: Request, method: string, route: string[],
     const stage = await undoLastOpen(group);
     await audit(admin, 'باز شدن مرحله‌ی سفر برگردانده شد', `گروه ${group}`, stage?.title ?? '');
     return json(await adminTrip(group));
+  }
+  if (route.length === 1 && route[0] === 'adjust' && method === 'POST') {
+    const result = await adjustPoints(admin.username, await readJson(request));
+    await audit(admin, result.delta > 0 ? 'امتیاز اضافه شد' : 'امتیاز کم شد', result.name, `${result.delta > 0 ? '+' : ''}${result.delta}${result.reason ? ' · ' + result.reason : ''}`);
+    return json(await adminTrip(group));
+  }
+  if (route.length === 1 && route[0] === 'adjustments' && method === 'GET') {
+    const user = new URL(request.url).searchParams.get('user') ?? '';
+    if (!isValidId(user)) throw badRequest('کاربر نامعتبر است.');
+    return json({ items: await listAdjustments(user) });
   }
   throw notFound();
 }

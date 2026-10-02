@@ -30,7 +30,7 @@ const groupFirstDone = (stage: StageDef, rows: Map<string, TaskRow>) =>
   });
 
 /** Pure scoring: points and badges from a member's task rows and the stage opening times (epoch ms). */
-export function score(rowsList: TaskRow[], opened: Record<string, number>): Score {
+export function score(rowsList: TaskRow[], opened: Record<string, number>, adjustment = 0): Score {
   const rows = new Map(rowsList.map((r) => [r.task_id, r]));
   const result: Score = { points: 0, stages: {}, badges: [] };
 
@@ -76,6 +76,8 @@ export function score(rowsList: TaskRow[], opened: Record<string, number>): Scor
     if (stage.quiz.length > 0 && correct === stage.quiz.length) result.badges.push(`perfect:${stage.id}`);
   }
   if (STAGES.every((s) => result.stages[s.id].complete)) result.badges.push('finisher');
+  // The organiser's manual additions and deductions; the total never goes below zero.
+  result.points = Math.max(0, result.points + adjustment);
   return result;
 }
 

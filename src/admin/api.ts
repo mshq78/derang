@@ -125,10 +125,23 @@ export interface TripAdmin {
   now: number;
   opened: Record<string, number>;
   stages: { id: string; title: string; subtitle: string; openedAt: number | null; done: number }[];
-  members: { id: string; rank: number; name: string; points: number; badges: number; stagesDone: number; everLoggedIn: boolean }[];
+  members: { id: string; rank: number; name: string; points: number; adjust: number; badges: number; stagesDone: number; everLoggedIn: boolean }[];
   total: number;
 }
 
 export const fetchTrip = (group: string) => get<TripAdmin>(`/api/admin/trip?group=${group}`);
 export const openNextTripStage = (group: string) => send<TripAdmin>('POST', `/api/admin/trip/open?group=${group}`);
 export const undoTripStage = (group: string) => send<TripAdmin>('POST', `/api/admin/trip/undo?group=${group}`);
+
+export interface PointAdjustment {
+  id: number;
+  delta: number;
+  reason: string;
+  actor: string;
+  at: string;
+}
+
+export const adjustTripPoints = (group: string, userId: string, delta: number, reason: string) =>
+  send<TripAdmin>('POST', `/api/admin/trip/adjust?group=${group}`, { userId, delta, reason });
+export const listPointAdjustments = (group: string, userId: string) =>
+  get<{ items: PointAdjustment[] }>(`/api/admin/trip/adjustments?group=${group}&user=${encodeURIComponent(userId)}`).then((r) => r.items);

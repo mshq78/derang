@@ -9,12 +9,12 @@ export const isGroup = (value: unknown): value is string => typeof value === 'st
 
 interface GroupData {
   opened: Record<string, number>;
-  members: { id: string; name: string; short: string; rows: TaskRow[]; lastLoginAt: number | null }[];
+  members: { id: string; name: string; short: string; rows: TaskRow[]; lastLoginAt: number | null; adjust: number }[];
 }
 
 async function loadGroup(group: string): Promise<GroupData> {
   const db = getDb();
-  const [openRows, users, progress] = await Promise.all([
+  const [openRows, users, progress, adjustments] = await Promise.all([
     db.query('SELECT stage_id, opened_at FROM trip_stage_opens WHERE group_name = $1', [group]),
     db.query(
       `SELECT id, first_name, last_name, last_login_at FROM users WHERE trip_group = $1 AND NOT disabled ORDER BY created_at, id`,
@@ -25,7 +25,13 @@ async function loadGroup(group: string): Promise<GroupData> {
        JOIN users u ON u.id = p.user_id WHERE u.trip_group = $1`,
       [group]
     ),
+    db.query(
+      `SELECT a.user_id, sum(a.delta)::int AS total FROM trip_adjustments a
+       JOIN users u ON u.id = a.user_id WHERE u.trip_group = $1 GROUP BY a.user_id`,
+      [group]
+    ),
   ]);
+  const adjustByUser = new Map(adjustments.map((r) => [r.user_id as string, Number(r.total)]));
   const opened: Record<string, number> = {};
   for (const r of openRows) opened[r.stage_id as string] = new Date(r.opened_at as string).getTime();
   const byUser = new Map<string, TaskRow[]>();
@@ -46,6 +52,7 @@ async function loadGroup(group: string): Promise<GroupData> {
         short: last ? `${first} ${last.charAt(0)}.` : first,
         rows: byUser.get(u.id as string) ?? [],
         lastLoginAt: u.last_login_at ? new Date(u.last_login_at as string).getTime() : null,
+        adjust: adjustByUser.get(u.id as string) ?? 0,
       };
     }),
   };
@@ -55,7 +62,7 @@ export async function tripState(user: PublicUser) {
   const group = user.tripGroup;
   if (!isGroup(group)) return { group: null };
   const data = await loadGroup(group);
-  const scored = data.members.map((m) => ({ m, s: score(m.rows, data.opened) }));
+  const scored = data.members.map((m) => ({ m, s: score(m.rows, data.opened, m.adjust) }));
   scored.sort((a, b) => b.s.points - a.s.points || a.m.name.localeCompare(b.m.name, 'fa'));
   const mine = scored.find((x) => x.m.id === user.id);
   const myRows = mine?.m.rows ?? [];
@@ -138,7 +145,7 @@ export async function answerQuestion(user: PublicUser, body: unknown) {
 
 export async function adminTrip(group: string) {
   const data = await loadGroup(group);
-  const scored = data.members.map((m) => ({ m, s: score(m.rows, data.opened) }));
+  const scored = data.members.map((m) => ({ m, s: score(m.rows, data.opened, m.adjust) }));
   scored.sort((a, b) => b.s.points - a.s.points || a.m.name.localeCompare(b.m.name, 'fa'));
   return {
     group,
@@ -156,6 +163,7 @@ export async function adminTrip(group: string) {
       rank: i + 1,
       name: x.m.name,
       points: x.s.points,
+      adjust: x.m.adjust,
       badges: x.s.badges.length,
       stagesDone: Object.values(x.s.stages).filter((st) => st.complete).length,
       everLoggedIn: x.m.lastLoginAt !== null,
@@ -192,3 +200,25 @@ export async function undoLastOpen(group: string) {
 }
 
 export type { Score };
+
+export async function adjustPoints(actor: string, body: unknown) {
+  const { userId, delta, reason } = (body ?? {}) as { userId?: unknown; delta?: unknown; reason?: unknown };
+  if (typeof userId !== 'string' || !userId) throw badRequest('کاربر مشخص نیست.');
+  if (typeof delta !== 'number' || !Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 10_000) {
+    throw badRequest('امتیاز باید یک عدد صحیح غیر صفر (حداکثر ۱۰٬۰۰۰) باشد.');
+  }
+  const text = typeof reason === 'string' ? reason.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200) : '';
+  const [member] = await getDb().query('SELECT first_name, last_name, trip_group FROM users WHERE id = $1', [userId]);
+  if (!member) throw notFound('این کاربر پیدا نشد.');
+  if (!isGroup(member.trip_group)) throw conflict('این کاربر در گروه سفر نیست.');
+  await getDb().query('INSERT INTO trip_adjustments (user_id, delta, reason, actor) VALUES ($1, $2, $3, $4)', [userId, delta, text, actor]);
+  return { name: `${member.first_name} ${member.last_name}`.trim(), delta, reason: text };
+}
+
+export async function listAdjustments(userId: string) {
+  const rows = await getDb().query(
+    'SELECT id, delta, reason, actor, at FROM trip_adjustments WHERE user_id = $1 ORDER BY at DESC, id DESC LIMIT 50',
+    [userId]
+  );
+  return rows.map((r) => ({ id: Number(r.id), delta: Number(r.delta), reason: r.reason as string, actor: r.actor as string, at: new Date(r.at as string).toISOString() }));
+}
