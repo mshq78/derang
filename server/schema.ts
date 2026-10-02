@@ -163,10 +163,12 @@ async function once(name: string, run: () => Promise<void>): Promise<void> {
 }
 
 const TRIP_VIDEOS = [
-  { id: 'video-isfahan1', title: 'اصفهان ۱؛ پیش از سقوط پایتخت', url: 'https://www.aparat.com/v/pbqat3z', desc: 'اصفهان ۱۷۲۲؛ نشانه‌هایی که سال‌ها پیش از سقوط دیده نشدند.' },
-  { id: 'video-trabant', title: 'ترابانت؛ خودرویی که منجمد شد', url: 'https://www.aparat.com/v/rkca7e5', desc: 'داستان ترابانت و هر «فعلاً نه» که هزینه‌اش را به آینده منتقل کرد.' },
-  { id: 'video-titan', title: 'تایتان؛ زیردریایی که هشدارها را نشنید', url: 'https://www.aparat.com/v/kaw75kb', desc: 'منیت، ریسک و هویت در حادثه‌ی زیردریایی تایتان.' },
-  { id: 'video-paloalto', title: 'پالو آلتو؛ داستانی که واقعیت را کنار زد', url: 'https://www.aparat.com/v/wxehs4a', desc: 'اخلاق، روایت و روابط در ماجرای ترانوس.' },
+  { id: 'video-isfahan1', title: 'اصفهان ۱؛ پیش از سقوط پایتخت', url: 'https://aparat.com/v/wxehs4a', desc: 'اصفهان ۱۷۲۲؛ نشانه‌هایی که سال‌ها پیش از سقوط دیده نشدند.' },
+  { id: 'video-trabant', title: 'ترابانت؛ خودرویی که منجمد شد', url: 'https://aparat.com/v/wuvhz03', desc: 'داستان ترابانت و هر «فعلاً نه» که هزینه‌اش را به آینده منتقل کرد.' },
+  { id: 'video-titan', title: 'تایتان؛ زیردریایی که هشدارها را نشنید', url: 'https://aparat.com/v/pbqat3z', desc: 'منیت، ریسک و هویت در حادثه‌ی زیردریایی تایتان.' },
+  { id: 'video-paloalto', title: 'پالو آلتو؛ داستانی که واقعیت را کنار زد', url: 'https://aparat.com/v/kaw75kb', desc: 'اخلاق، روایت و روابط در ماجرای ترانوس.' },
+  // On the site, but not one of the trip stages.
+  { id: 'video-hudson', title: 'سقوط بر روی هادسن', url: 'https://aparat.com/v/rkca7e5', desc: 'هیجان و حافظه در بحران؛ ماجرای پرواز ۱۵۴۹ و رود هادسن.' },
 ];
 
 async function runOnceMigrations(): Promise<void> {
@@ -197,12 +199,30 @@ async function runOnceMigrations(): Promise<void> {
         ]
       );
     }
-    await db.query(
-      `INSERT INTO content_meta (id, version, updated_at) VALUES (1, $1, now())
-       ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version, updated_at = now()`,
-      [`mig-${Date.now().toString(36)}`]
-    );
+    await bumpVersion();
   });
+  // The first list had the links in the wrong order: set each video's title, link and text again.
+  await once('2026-10-trip-videos-fix', async () => {
+    let order = 100;
+    for (const v of TRIP_VIDEOS) {
+      order += 10;
+      await db.query(
+        `INSERT INTO content_items (collection, id, sort_order, is_published, data)
+         VALUES ('videos', $1, $2, true, $3::jsonb)
+         ON CONFLICT (collection, id) DO UPDATE SET data = content_items.data || EXCLUDED.data, updated_at = now()`,
+        [v.id, order, JSON.stringify({ title: v.title, desc: v.desc, videoUrl: v.url })]
+      );
+    }
+    await bumpVersion();
+  });
+}
+
+async function bumpVersion(): Promise<void> {
+  await getDb().query(
+    `INSERT INTO content_meta (id, version, updated_at) VALUES (1, $1, now())
+     ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version, updated_at = now()`,
+    [`mig-${Date.now().toString(36)}`]
+  );
 }
 
 /** One-off data fixes. Each only touches rows still holding the old value. */
