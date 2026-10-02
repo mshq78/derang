@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Award, Bus, CheckCircle2, ChevronLeft, Lock, LogOut, Trophy, WifiOff } from 'lucide-react';
 import { useContent } from '../context/ContentContext';
 import { BADGES, STAGES } from '../data/journey';
-import { fetchTripState, type TripState } from '../lib/trip';
+import { bodyTaskId, fetchTripState, flushOutbox, loadOutbox, type TripState } from '../lib/trip';
+import { OfflineCard, type OfflineItem } from './OfflineCard';
 import type { AuthUser } from '../lib/userAuth';
 import { toPersianDigits } from '../utils/helpers';
 import { cx } from '../admin/ui';
@@ -43,7 +44,12 @@ export const JourneyApp: React.FC<{
 
   const refresh = useCallback(async () => {
     try {
+      await flushOutbox(user.id);
       const next = await fetchTripState();
+      // Parts finished with no connection that are still waiting to be sent stay shown as done.
+      for (const waiting of loadOutbox(user.id)) {
+        next.done = { ...(next.done ?? {}), [bodyTaskId(waiting)]: { at: Date.now() } };
+      }
       setState(next);
       setOffline(false);
       try {
@@ -54,7 +60,7 @@ export const JourneyApp: React.FC<{
     } catch {
       setOffline(true);
     }
-  }, [cacheKey]);
+  }, [cacheKey, user.id]);
 
   useEffect(() => {
     void refresh();
@@ -129,6 +135,26 @@ export const JourneyApp: React.FC<{
     [content]
   );
 
+  const markDone = useCallback(
+    (task: string) => setState((s) => (s ? { ...s, done: { ...(s.done ?? {}), [task]: { at: Date.now() } } } : s)),
+    []
+  );
+
+  const offlineItems = useMemo<OfflineItem[]>(() => {
+    const list: OfflineItem[] = [];
+    if (content.site.introAudioUrl) list.push({ url: content.site.introAudioUrl, title: content.site.introAudioTitle || 'معرفی صوتی درنگ' });
+    for (const stage of STAGES) {
+      for (const group of stage.groups) {
+        for (const item of group.items) {
+          if (item.key !== 'audio' || item.ref.source !== 'story') continue;
+          const story = content.audioStories.find((s) => s.id === (item.ref as { id: string }).id);
+          if (story?.audioUrl && !list.some((l) => l.url === story.audioUrl)) list.push({ url: story.audioUrl, title: story.title });
+        }
+      }
+    }
+    return list;
+  }, [content]);
+
   const stageDef = openStage ? STAGES.find((s) => s.id === openStage) : null;
 
   const logout = async () => {
@@ -193,6 +219,7 @@ export const JourneyApp: React.FC<{
             userId={user.id}
             onBack={() => setOpenStage(null)}
             refresh={() => void refresh()}
+            markDone={markDone}
           />
         ) : (
           <>
@@ -214,6 +241,8 @@ export const JourneyApp: React.FC<{
                 <p className="mt-2 text-center text-sm font-extrabold text-success-ink">همه‌ی مرحله‌های باز شده را انجام دادید. آفرین!</p>
               ) : null}
             </section>
+
+            <OfflineCard items={offlineItems} />
 
             {boarded && state.started && (
               <>

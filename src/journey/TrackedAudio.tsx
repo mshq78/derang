@@ -1,6 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Pause, Play, RotateCcw } from 'lucide-react';
 import { toPersianDigits } from '../utils/helpers';
+import { getSavedBlob } from '../lib/offline';
+
+/** The address to play: the copy saved on this phone when there is one, otherwise the online file. */
+function useSavedSrc(src: string): { src: string; saved: boolean } {
+  const [state, setState] = useState<{ src: string; saved: boolean }>({ src, saved: false });
+  useEffect(() => {
+    let revoke: string | null = null;
+    let cancelled = false;
+    setState({ src, saved: false });
+    getSavedBlob(src).then((blob) => {
+      if (!blob || cancelled) return;
+      revoke = URL.createObjectURL(blob);
+      setState({ src: revoke, saved: true });
+    });
+    return () => {
+      cancelled = true;
+      if (revoke) URL.revokeObjectURL(revoke);
+    };
+  }, [src]);
+  return state;
+}
 
 let current: HTMLAudioElement | null = null;
 
@@ -20,6 +41,7 @@ export const TrackedAudio: React.FC<{
   onFinished: () => void;
 }> = ({ src, title, done, onFinished }) => {
   const ref = useRef<HTMLAudioElement>(null);
+  const source = useSavedSrc(src);
   const reached = useRef(0); // furthest second heard without skipping
   const reported = useRef(false);
   const [playing, setPlaying] = useState(false);
@@ -94,7 +116,7 @@ export const TrackedAudio: React.FC<{
   const progress = duration ? Math.min(100, (time / duration) * 100) : 0;
   return (
     <div className="rounded-2xl border border-line bg-surface p-4">
-      <audio ref={ref} src={src} preload="metadata" playsInline />
+      <audio ref={ref} src={source.src} preload="metadata" playsInline />
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -110,7 +132,7 @@ export const TrackedAudio: React.FC<{
             <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${progress}%` }} />
           </div>
           <p className="mt-1 text-xs text-ink-3">
-            {failed ? 'اتصال قطع شد؛ دوباره دکمه‌ی پخش را بزنید.' : duration ? `${clock(time)} از ${clock(duration)}` : 'آماده‌ی پخش'}
+            {failed ? 'اتصال قطع شد؛ دوباره دکمه‌ی پخش را بزنید.' : duration ? `${clock(time)} از ${clock(duration)}` : 'آماده‌ی پخش'}{source.saved && !failed ? ' · ذخیره‌شده روی گوشی' : ''}
           </p>
         </div>
         {done && <CheckCircle2 className="h-6 w-6 flex-shrink-0 text-success" aria-label="انجام شد" />}

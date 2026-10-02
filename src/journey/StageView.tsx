@@ -3,7 +3,7 @@ import { ArrowRight, Lock } from 'lucide-react';
 import { STAGES, taskId, type MediaItem, type StageDef } from '../data/journey';
 import type { AudioStory, Person, VideoItem } from '../types/content';
 import type { SiteSettings } from '../types/content';
-import { completeTripTask, type TripState } from '../lib/trip';
+import { bodyTaskId, completeOrQueue, type CompleteBody, type TripState } from '../lib/trip';
 import { TrackedAudio } from './TrackedAudio';
 import { TrackedVideo } from './TrackedVideo';
 import { JOURNEY_TEXTS } from '../data/journeyTexts';
@@ -36,13 +36,14 @@ export const StageView: React.FC<{
   userId: string;
   onBack: () => void;
   refresh: () => void;
-}> = ({ stage, state, content, userId, onBack, refresh }) => {
+  markDone: (task: string) => void;
+}> = ({ stage, state, content, userId, onBack, refresh, markDone }) => {
   const index = STAGES.findIndex((s) => s.id === stage.id);
   const opened = !!state.opened?.[stage.id];
   const done = state.done ?? {};
-  const report = (body: Parameters<typeof completeTripTask>[0]) => () => {
-    completeTripTask(body)
-      .then(refresh)
+  const report = (body: CompleteBody) => () => {
+    completeOrQueue(userId, body)
+      .then((result) => (result === 'queued' ? markDone(bodyTaskId(body)) : refresh()))
       .catch(() => undefined); // it is retried the next time the part is finished
   };
 

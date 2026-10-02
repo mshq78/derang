@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useContent } from './context/ContentContext';
 import { FarewellScreen } from './components/FarewellScreen';
 import { LoginScreen } from './components/LoginScreen';
-import { AuthUser, fetchMe, logoutUser, saveUserProfile } from './lib/userAuth';
+import { AuthError, AuthUser, fetchMe, logoutUser, saveUserProfile } from './lib/userAuth';
 const JourneyApp = React.lazy(() => import('./journey/JourneyApp').then((m) => ({ default: m.JourneyApp })));
 import { STORAGE_KEY, adoptLegacyData, userStorageKey } from './lib/storage';
 
@@ -14,6 +14,16 @@ export interface AppShellProps {
   onLogout?: (name: string) => Promise<void>;
   onSaveProfile?: (firstName: string, lastName: string) => Promise<void>;
 }
+
+const LAST_USER_KEY = 'derang_last_user';
+
+const forgetLastUser = () => {
+  try {
+    localStorage.removeItem(LAST_USER_KEY);
+  } catch {
+    // optional
+  }
+};
 
 type AuthState =
   | { status: 'checking' }
@@ -58,13 +68,31 @@ export const AuthGate: React.FC<{ AppComponent: React.ComponentType<AppShellProp
         if (cancelled) return;
         if (me) {
           adoptLegacyData(me.id);
+          try {
+            localStorage.setItem(LAST_USER_KEY, JSON.stringify(me));
+          } catch {
+            // optional
+          }
           setAuth({ status: 'in', user: me });
         } else {
           setAuth({ status: 'out' });
         }
       })
       .catch((err: unknown) => {
-        if (!cancelled) setAuth({ status: 'error', message: err instanceof Error ? err.message : 'خطای ناشناخته' });
+        if (cancelled) return;
+        // No connection: carry on as the person who was signed in on this phone.
+        if (err instanceof AuthError && (err.code === 'network' || err.code === 'timeout')) {
+          try {
+            const cached = JSON.parse(localStorage.getItem(LAST_USER_KEY) || 'null') as AuthUser | null;
+            if (cached?.id) {
+              setAuth({ status: 'in', user: cached });
+              return;
+            }
+          } catch {
+            // fall through to the error screen
+          }
+        }
+        setAuth({ status: 'error', message: err instanceof Error ? err.message : 'خطای ناشناخته' });
       });
     return () => {
       cancelled = true;
@@ -124,6 +152,7 @@ export const AuthGate: React.FC<{ AppComponent: React.ComponentType<AppShellProp
               user={user}
               onLogout={async (name) => {
                 await logoutUser();
+                forgetLastUser();
                 setAuth({ status: 'farewell', name });
               }}
             />
@@ -137,6 +166,7 @@ export const AuthGate: React.FC<{ AppComponent: React.ComponentType<AppShellProp
           user={user}
           onLogout={async (name) => {
             await logoutUser();
+                forgetLastUser();
             setAuth({ status: 'farewell', name });
           }}
           onSaveProfile={async (firstName, lastName) => {
