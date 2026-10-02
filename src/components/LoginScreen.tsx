@@ -211,7 +211,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ brandName, orgName, sm
             </div>
             <div>
               <label htmlFor="password" className="mb-1.5 block text-xs font-bold text-ink">
-                رمز عبور (شماره پرسنلی)
+                رمز عبور (کد ملی)
               </label>
               <input
                 id="password"

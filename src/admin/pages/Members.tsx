@@ -343,7 +343,7 @@ const MemberFormDialog: React.FC<{ member?: Member; onClose: () => void; onSaved
         </select>
       </Field>
       {!member && (
-        <Field label="رمز عبور" hint="مثلاً شماره پرسنلی. بعد از ذخیره قابل مشاهده نیست.">
+        <Field label="رمز عبور" hint="مثلاً کد ملی. بعد از ذخیره قابل مشاهده نیست.">
           <input className={`${inputClass} text-left`} dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" />
         </Field>
       )}
@@ -546,7 +546,7 @@ const ImportDialog: React.FC<{ onClose: () => void; onDone: (summary: string) =>
       ) : (
         <>
           <p className="text-[13px] leading-relaxed text-ink-3">
-            فایل اکسل (xlsx) یا CSV را انتخاب کنید. شماره‌ی موبایل می‌شود نام کاربری، و ستونی که انتخاب می‌کنید (مثلاً شماره پرسنلی) رمز عبور.
+            فایل اکسل (xlsx) یا CSV را انتخاب کنید. شماره‌ی موبایل می‌شود نام کاربری، و ستونی که انتخاب می‌کنید (مثلاً کد ملی) رمز عبور.
             اگر شماره‌ای از قبل باشد، نام و رمزش به‌روز می‌شود.
           </p>
           <input ref={fileRef} type="file" accept=".xlsx,.csv,.txt" className="hidden" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ''; }} />
