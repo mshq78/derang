@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
+import { useBackLayer } from '../hooks/useBackLayer';
 
 export const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
 
@@ -102,6 +103,7 @@ export const Dialog: React.FC<{
   footer?: React.ReactNode;
   wide?: boolean;
 }> = ({ title, onClose, children, footer, wide }) => {
+  useBackLayer(true, onClose);
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     document.addEventListener('keydown', onKey);

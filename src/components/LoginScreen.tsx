@@ -10,6 +10,7 @@ import {
 } from '../lib/userAuth';
 import { toPersianDigits } from '../utils/helpers';
 import { BrandMark } from './BrandMark';
+import { useBackLayer } from '../hooks/useBackLayer';
 import { maskPhone, normalizeIranMobile, toLatinDigits } from '../utils/phone';
 
 interface LoginScreenProps {
@@ -43,6 +44,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ brandName, orgName, sm
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const mainInputRef = useRef<HTMLInputElement>(null);
+  // Back from the code step returns to the number step.
+  useBackLayer(step === 'code', () => {
+    setError(null);
+    setStep('phone');
+  });
 
   useEffect(() => {
     mainInputRef.current?.focus();

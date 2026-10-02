@@ -27,6 +27,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { toPersianDigits } from '../utils/helpers';
+import { useBackLayer } from '../hooks/useBackLayer';
 import { adminLogin, adminLogout, getAdminToken } from '../lib/api';
 import { AdminPanel } from '../components/AdminPanel';
 import { BrandMark } from '../components/BrandMark';
@@ -113,6 +114,7 @@ export const AdminConsole: React.FC<{ onBackToApp: () => void }> = ({ onBackToAp
   const [section, setSectionState] = useState<Section>(readSection);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  useBackLayer(menuOpen, () => setMenuOpen(false));
   const [contentOpen, setContentOpen] = useState(() => readSection().startsWith('content:'));
 
   const notify = useCallback((message: string) => {

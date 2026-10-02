@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
+import { useBackLayer } from '../hooks/useBackLayer';
 
 interface ModalProps {
   onClose: () => void;
@@ -26,6 +27,7 @@ export const Modal: React.FC<ModalProps> = ({
   ariaLabelledBy,
   showCloseButton = true,
 }) => {
+  useBackLayer(true, onClose);
   const modalRef = useRef<HTMLDivElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
 

@@ -8,6 +8,7 @@ import type { AuthUser } from '../lib/userAuth';
 import { toPersianDigits } from '../utils/helpers';
 import { cx } from '../admin/ui';
 import { BrandMark } from '../components/BrandMark';
+import { useBackLayer } from '../hooks/useBackLayer';
 import { RouteMap } from './RouteMap';
 import { StageView } from './StageView';
 
@@ -157,6 +158,7 @@ export const JourneyApp: React.FC<{
   }, [content]);
 
   const stageDef = openStage ? STAGES.find((s) => s.id === openStage) : null;
+  useBackLayer(!!stageDef, () => setOpenStage(null));
 
   const logout = async () => {
     setLeaving(true);

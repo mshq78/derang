@@ -66,6 +66,7 @@ import { AuthGate } from './AuthGate';
 import type { AppShellProps } from './AuthGate';
 import { FarewellScreen } from './components/FarewellScreen';
 import { BrandMark } from './components/BrandMark';
+import { useBackLayer } from './hooks/useBackLayer';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { ArchetypeCard } from './components/ArchetypeCard';
@@ -335,6 +336,8 @@ function DerangApp({ storageKey, user, onLogout, onSaveProfile }: AppShellProps)
   });
 
   const [screen, setScreen] = useState<Screen>('home');
+  // On a phone, Back from any inner screen goes to the home screen first instead of leaving the site.
+  useBackLayer(screen !== 'home' && screen !== 'farewell', () => setScreen('home'));
   // Name shown on the farewell screen; the profile itself is cleared on exit.
   const [farewellName, setFarewellName] = useState('');
   const [questionIndex, setQuestionIndex] = useState(0);

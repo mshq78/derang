@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { RefreshCw, X } from 'lucide-react';
+import { useBackLayer } from '../hooks/useBackLayer';
 
 interface CardViewerProps {
   name: string;
@@ -43,6 +44,7 @@ export const CardViewer: React.FC<CardViewerProps> = ({
   onSideShown,
   onClose,
 }) => {
+  useBackLayer(true, onClose);
   const [flipped, setFlipped] = useState(initialSide === 'back' && !!backUrl);
   useEffect(() => {
     onSideShown?.(flipped ? 'back' : 'front');

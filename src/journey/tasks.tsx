@@ -5,6 +5,7 @@ import type { Person } from '../types/content';
 import { CardViewer } from '../components/CardViewer';
 import { answerTripQuestion, submitTripTest, type TripTaskDone } from '../lib/trip';
 import { cx } from '../admin/ui';
+import { useBackLayer } from '../hooks/useBackLayer';
 import { toPersianDigits } from '../utils/helpers';
 
 export const TestTask: React.FC<{
@@ -159,6 +160,7 @@ export const CardsTask: React.FC<{
 
 /** When a card has no image, its text is shown instead and counts as seen. */
 const CardFallback: React.FC<{ person: Person; onSeen: () => void; onClose: () => void }> = ({ person, onSeen, onClose }) => {
+  useBackLayer(true, onClose);
   useEffect(onSeen, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/60 p-4" onClick={onClose}>
