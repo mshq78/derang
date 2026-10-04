@@ -68,13 +68,14 @@ export const StageView: React.FC<{
         </div>
       ) : (
         <>
+          {stage.special && <StepsOverview stage={stage} done={done} />}
           {stage.groups.map((group) => {
             const available = group.items
               .map((item) => ({ item, found: resolve(item, content) }))
               .filter((x): x is { item: MediaItem; found: NonNullable<ReturnType<typeof resolve>> } => x.found !== null);
             const groupDone = ['audio', 'video', 'text', 'tour', 'confirm'].some((k) => done[taskId.media(stage.id, group.id, k)]);
             return (
-              <div key={group.id} className="space-y-2">
+              <div key={group.id} id={`step-${group.id}`} className="scroll-mt-20 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-extrabold text-ink">{group.title}</p>
                   {groupDone && (
@@ -132,10 +133,10 @@ export const StageView: React.FC<{
           })}
 
           {stage.special?.includes('test') && (
-            <TestTask url={content.site.externalTestUrl || 'https://test.igera.ir/'} done={done[taskId.test]} onSaved={refresh} />
+            <div id="step-test" className="scroll-mt-20"><TestTask url={content.site.externalTestUrl || 'https://test.igera.ir/'} done={done[taskId.test]} onSaved={refresh} /></div>
           )}
           {stage.special?.includes('cards') && (
-            <CardsTask people={content.people} userId={userId} done={!!done[taskId.cards]} onFinished={report({ stageId: stage.id, special: 'cards' })} />
+            <div id="step-cards" className="scroll-mt-20"><CardsTask people={content.people} userId={userId} done={!!done[taskId.cards]} onFinished={report({ stageId: stage.id, special: 'cards' })} /></div>
           )}
           <Quiz stageId={stage.id} questions={stage.quiz} done={done} counted={!!state.me?.stages[stage.id]?.complete} onAnswered={refresh} />
 
@@ -149,6 +150,40 @@ export const StageView: React.FC<{
           />
         </>
       )}
+    </div>
+  );
+};
+
+/** The tasks of the first stage as a short checklist: what is done and what to do now. */
+const StepsOverview: React.FC<{ stage: StageDef; done: TripState['done'] }> = ({ stage, done = {} }) => {
+  const intro = stage.groups[0];
+  const steps = [
+    { id: `step-${intro.id}`, label: 'معرفی درنگ؛ صوت را بشنوید یا تور را ببینید', ok: ['audio', 'tour', 'text', 'confirm'].some((k) => done[taskId.media(stage.id, intro.id, k)]) },
+    { id: 'step-test', label: 'تست شخصیت؛ بروید، تست را انجام دهید و برگردید نتیجه را ثبت کنید', ok: !!done[taskId.test] },
+    { id: 'step-cards', label: 'پنج کارت؛ هر کارت را از روی و پشت بخوانید', ok: !!done[taskId.cards] },
+  ];
+  const next = steps.findIndex((s) => !s.ok);
+  const digits = '۰۱۲۳۴۵۶۷۸۹';
+  return (
+    <div className="space-y-2 rounded-2xl border border-line bg-surface p-4">
+      <p className="text-sm font-extrabold text-ink">این مرحله سه کار دارد</p>
+      <ol className="space-y-1.5">
+        {steps.map((st, i) => (
+          <li key={st.id}>
+            <button
+              type="button"
+              onClick={() => document.getElementById(st.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-right text-[13px] ${next === i ? 'bg-primary-soft font-extrabold text-primary' : st.ok ? 'text-ink-3' : 'text-ink'}`}
+            >
+              <span className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-extrabold ${st.ok ? 'bg-success text-surface' : next === i ? 'bg-primary text-surface' : 'bg-surface-2 text-ink-3'}`}>
+                {st.ok ? <CheckCircle2 className="h-4 w-4" /> : digits[i + 1]}
+              </span>
+              <span className="flex-1">{st.label}</span>
+              {next === i && <span className="flex-shrink-0 text-xs">الان نوبت این است</span>}
+            </button>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 };

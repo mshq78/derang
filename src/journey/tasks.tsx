@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ExternalLink, XCircle } from 'lucide-react';
 import { CHARACTERS, POINTS, type QuizQuestion } from '../data/journey';
 import type { Person, TourSlide } from '../types/content';
@@ -9,6 +9,8 @@ import { cx } from '../admin/ui';
 import { useBackLayer } from '../hooks/useBackLayer';
 import { toPersianDigits } from '../utils/helpers';
 
+const testVisitKey = 'derang_test_visited';
+
 export const TestTask: React.FC<{
   url: string;
   done?: TripTaskDone;
@@ -17,6 +19,27 @@ export const TestTask: React.FC<{
   const [choice, setChoice] = useState<string>(done?.character ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [visited, setVisited] = useState(() => {
+    try {
+      return sessionStorage.getItem(testVisitKey) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [returned, setReturned] = useState(false);
+  const pick = useRef<HTMLDivElement>(null);
+
+  // Coming back to this tab after opening the test: point to the next step.
+  useEffect(() => {
+    if (!visited || done) return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      setReturned(true);
+      pick.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [visited, done]);
 
   const save = async () => {
     if (!choice) return;
@@ -32,48 +55,79 @@ export const TestTask: React.FC<{
     }
   };
 
+  const openTest = () => {
+    setVisited(true);
+    try {
+      sessionStorage.setItem(testVisitKey, '1');
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="space-y-3 rounded-2xl border border-line bg-surface p-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-bold text-ink">تست شخصیت تصمیم‌گیری</p>
+        <p className="text-sm font-extrabold text-ink">تست شخصیت تصمیم‌گیری</p>
         {done && <CheckCircle2 className="h-6 w-6 text-success" aria-label="انجام شد" />}
       </div>
-      <p className="text-[13px] leading-relaxed text-ink-3">
-        ۱) تست را انجام دهید. ۲) برگردید و شخصیتی را که نتیجه‌ی تست شما بود انتخاب کنید.
-      </p>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface-2 py-2.5 text-sm font-bold text-ink hover:bg-surface"
-      >
-        <ExternalLink className="h-4 w-4" /> رفتن به تست
-      </a>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {CHARACTERS.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => setChoice(c.id)}
-            aria-pressed={choice === c.id}
-            className={cx(
-              'rounded-xl border px-3 py-2.5 text-sm font-bold transition-colors',
-              choice === c.id ? 'border-primary bg-primary text-surface' : 'border-line bg-surface-2 text-ink hover:bg-surface'
-            )}
-          >
-            {c.name}
-          </button>
-        ))}
+
+      <div className="space-y-2 rounded-xl bg-surface-2 p-3">
+        <p className="flex items-center gap-2 text-[13px] font-extrabold text-ink">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs text-surface">۱</span> تست را انجام دهید
+        </p>
+        <p className="text-[13px] leading-relaxed text-ink-3">
+          دکمه‌ی زیر سایت تست را در یک صفحه‌ی جدید باز می‌کند. تست را تا آخر انجام دهید؛ نتیجه‌ی شما یکی از این پنج شخصیت است. بعد از تست، به همین صفحه برگردید.
+        </p>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={openTest}
+          className={cx(
+            'flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-extrabold',
+            done ? 'border border-line bg-surface text-ink' : 'bg-primary text-surface shadow-md'
+          )}
+        >
+          <ExternalLink className="h-4 w-4" /> {done ? 'انجام دوباره‌ی تست' : 'رفتن به سایت تست'}
+        </a>
       </div>
-      {error && <p role="alert" className="text-[13px] font-bold text-danger-ink">{error}</p>}
-      <button
-        type="button"
-        disabled={!choice || busy || choice === done?.character}
-        onClick={save}
-        className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-surface disabled:opacity-50"
-      >
-        {done ? (choice === done.character ? 'ثبت شد' : 'تغییر نتیجه') : 'ثبت نتیجه‌ی من'}
-      </button>
+
+      <div ref={pick} className={cx('space-y-2 rounded-xl p-3', returned && !done ? 'bg-success-soft ring-2 ring-success' : 'bg-surface-2')}>
+        {returned && !done && (
+          <p role="status" className="text-[13px] font-extrabold text-success-ink">خوش برگشتید! حالا نتیجه‌ی تستتان را اینجا ثبت کنید.</p>
+        )}
+        <p className="flex items-center gap-2 text-[13px] font-extrabold text-ink">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs text-surface">۲</span> نتیجه‌ی تست را اینجا ثبت کنید
+        </p>
+        <p className="text-[13px] leading-relaxed text-ink-3">
+          شخصیتی را که تست برای شما نشان داد انتخاب کنید و دکمه‌ی «ثبت نتیجه‌ی من» را بزنید. بدون ثبت، امتیاز این بخش حساب نمی‌شود.
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {CHARACTERS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setChoice(c.id)}
+              aria-pressed={choice === c.id}
+              className={cx(
+                'rounded-xl border px-3 py-2.5 text-sm font-bold transition-colors',
+                choice === c.id ? 'border-primary bg-primary text-surface' : 'border-line bg-surface text-ink hover:bg-surface-2'
+              )}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+        {error && <p role="alert" className="text-[13px] font-bold text-danger-ink">{error}</p>}
+        <button
+          type="button"
+          disabled={!choice || busy || choice === done?.character}
+          onClick={save}
+          className="w-full rounded-xl bg-primary py-3 text-sm font-extrabold text-surface disabled:opacity-50"
+        >
+          {done ? (choice === done.character ? 'ثبت شد ✓' : 'تغییر نتیجه') : 'ثبت نتیجه‌ی من'}
+        </button>
+      </div>
     </div>
   );
 };
@@ -125,7 +179,16 @@ export const CardsTask: React.FC<{
         <p className="text-sm font-bold text-ink">پنج شخصیت؛ روی کارت‌ها و پشت آن‌ها</p>
         {done ? <CheckCircle2 className="h-6 w-6 text-success" aria-label="انجام شد" /> : <span className="text-xs font-bold text-ink-3">{toPersianDigits(count)} از {toPersianDigits(people.length)}</span>}
       </div>
-      <p className="text-[13px] leading-relaxed text-ink-3">هر کارت را باز کنید، بخوانید و با دکمه‌ی «چرخاندن کارت» پشتش را هم ببینید.</p>
+      <ol className="space-y-1 text-[13px] leading-relaxed text-ink-3">
+        <li><b className="text-ink">۱.</b> روی هر کارت بزنید تا بزرگ شود و روی آن را بخوانید.</li>
+        <li><b className="text-ink">۲.</b> دکمه‌ی «چرخاندن کارت» را بزنید و پشت کارت را هم بخوانید.</li>
+        <li><b className="text-ink">۳.</b> کارت وقتی روی و پشتش دیده شد، تیک سبز می‌گیرد. هر پنج کارت لازم است.</li>
+      </ol>
+      {!done && people.length > count && (
+        <p className="rounded-xl bg-warning-soft px-3 py-2 text-[13px] font-bold text-warning-ink">
+          {toPersianDigits(people.length - count)} کارت مانده است.
+        </p>
+      )}
       <div className="grid grid-cols-5 gap-2">
         {people.map((p) => {
           const complete1 = (seen[p.id] ?? []).includes('front') && (!p.backImageUrl || (seen[p.id] ?? []).includes('back'));
@@ -139,6 +202,11 @@ export const CardsTask: React.FC<{
                 )}
               </div>
               {complete1 && <CheckCircle2 className="absolute -bottom-1.5 left-1/2 h-4 w-4 -translate-x-1/2 rounded-full bg-surface text-success" />}
+              {!complete1 && (
+                <span className="mt-1 block text-center text-[10px] font-bold text-ink-3">
+                  {(seen[p.id] ?? []).includes('front') && p.backImageUrl ? 'پشت مانده' : 'باز کنید'}
+                </span>
+              )}
             </button>
           );
         })}

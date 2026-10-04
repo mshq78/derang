@@ -47,6 +47,10 @@ export const CardViewer: React.FC<CardViewerProps> = ({
 }) => {
   useBackLayer(true, onClose);
   const [flipped, setFlipped] = useState(initialSide === 'back' && !!backUrl);
+  const [sawBack, setSawBack] = useState(initialSide === 'back' && !!backUrl);
+  useEffect(() => {
+    if (flipped) setSawBack(true);
+  }, [flipped]);
   useEffect(() => {
     onSideShown?.(flipped ? 'back' : 'front');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -118,12 +122,17 @@ export const CardViewer: React.FC<CardViewerProps> = ({
         </div>
       </div>
 
+      {backUrl && !sawBack && (
+        <p className="rounded-full bg-white/15 px-4 py-1.5 text-xs font-bold text-white" onClick={(e) => e.stopPropagation()}>
+          پشت کارت هم مطلب دارد؛ دکمه‌ی «چرخاندن کارت» را بزنید
+        </p>
+      )}
       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         {backUrl && (
           <button
             ref={firstButtonRef}
             onClick={() => setFlipped((f) => !f)}
-            className="flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-surface shadow-lg hover:bg-primary-hover active:scale-95 transition-all"
+            className={`flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-surface shadow-lg hover:bg-primary-hover active:scale-95 transition-all ${sawBack ? '' : 'animate-pulse'}`}
           >
             <RefreshCw className="h-4 w-4" />
             <span>{flipped ? 'نمایش روی کارت' : 'چرخاندن کارت'}</span>
