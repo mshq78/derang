@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Lock, Play, Undo2 } from 'lucide-react';
-import { adjustTripPoints, fetchTrip, listPointAdjustments, openNextTripStage, undoTripStage, type PointAdjustment, type TripAdmin } from '../api';
+import { CheckCircle2, Clock, Lock, Play, Undo2 } from 'lucide-react';
+import { adjustTripPoints, clearTripSchedule, fetchTrip, setTripSchedule, listPointAdjustments, openNextTripStage, undoTripStage, type PointAdjustment, type TripAdmin } from '../api';
 import { Badge, Button, Card, Dialog, ErrorNote, Field, PageHeader, Spinner, cx, errorText, formatDate, inputClass } from '../ui';
 import { toPersianDigits } from '../../utils/helpers';
 
@@ -15,6 +15,7 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<'open' | 'undo' | null>(null);
+  const [scheduling, setScheduling] = useState(false);
   const [adjusting, setAdjusting] = useState<TripAdmin['members'][number] | null>(null);
 
   const load = useCallback(async () => {
@@ -44,6 +45,15 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
     } finally {
       setBusy(false);
       setConfirm(null);
+    }
+  };
+
+  const cancelSchedule = async () => {
+    try {
+      setData(await clearTripSchedule(group));
+      notify('زمان‌بندی خودکار لغو شد.');
+    } catch (err) {
+      setError(errorText(err));
     }
   };
 
@@ -101,7 +111,13 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
 
           <Card>
             <div className="flex items-center justify-between border-b border-line px-4 py-3">
-              <h2 className="text-sm font-extrabold text-ink">مرحله‌ها</h2>
+ <h2 className="text-sm font-extrabold text-ink">مرحله‌ها</h2>
+              <span className="flex items-center gap-1">
+                <Button variant="ghost" onClick={() => setScheduling(true)} icon={<Clock className="h-3.5 w-3.5" />}>باز شدن خودکار</Button>
+                {data.stages.some((s) => s.scheduledAt && !s.openedAt) && (
+                  <Button variant="ghost" onClick={() => void cancelSchedule()}>لغو زمان‌بندی</Button>
+                )}
+              </span>
               <Button variant="ghost" disabled={busy || !data.stages.some((s) => s.openedAt !== null)} onClick={() => setConfirm('undo')} icon={<Undo2 className="h-3.5 w-3.5" />}>
                 برگرداندن آخرین باز شدن
               </Button>
@@ -114,7 +130,9 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-ink">{s.title}</p>
-                    <p className="text-xs text-ink-3">{s.openedAt ? `باز شده ساعت ${clockTime(s.openedAt)}` : 'هنوز باز نشده'}</p>
+                    <p className="text-xs text-ink-3">
+                      {s.openedAt ? `باز شده ساعت ${clockTime(s.openedAt)}` : s.scheduledAt ? `باز می‌شود ساعت ${clockTime(s.scheduledAt)} (خودکار)` : 'هنوز باز نشده'}
+                    </p>
                   </div>
                   {s.openedAt && (
                     <Badge tone={s.done === data.total && data.total > 0 ? 'success' : 'neutral'}>
@@ -166,6 +184,18 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
           }}
         />
       )}
+      {scheduling && data && (
+        <ScheduleDialog
+          group={group}
+          data={data}
+          onClose={() => setScheduling(false)}
+          onDone={(updated) => {
+            setData(updated);
+            setScheduling(false);
+            notify('زمان‌بندی خودکار ثبت شد.');
+          }}
+        />
+      )}
       {confirm === 'open' && next && (
         <Dialog
           title={nextIndex === 0 ? 'شروع سفر؟' : `باز کردن مرحله‌ی ${toPersianDigits(nextIndex + 1)}؟`}
@@ -187,6 +217,61 @@ export const TripPage: React.FC<{ notify: (message: string) => void }> = ({ noti
         </Dialog>
       )}
     </div>
+  );
+};
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const localInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+const ScheduleDialog: React.FC<{ group: string; data: TripAdmin; onClose: () => void; onDone: (data: TripAdmin) => void }> = ({ group, data, onClose, onDone }) => {
+  const firstScheduled = data.stages.find((s) => s.scheduledAt && !s.openedAt)?.scheduledAt;
+  const [start, setStart] = useState(localInput(new Date(firstScheduled ?? Date.now() + 10 * 60_000)));
+  const [every, setEvery] = useState('90');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const left = data.stages.filter((s) => s.openedAt === null);
+  const minutes = Number(every.replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))));
+  const valid = !!start && Number.isInteger(minutes) && minutes >= 1 && left.length > 0;
+  const times = valid ? left.map((_, i) => new Date(new Date(start).getTime() + i * minutes * 60_000).getTime()) : [];
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onDone(await setTripSchedule(group, new Date(start).toISOString(), minutes));
+    } catch (err) {
+      setError(errorText(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      title={`باز شدن خودکار مرحله‌ها؛ گروه ${toPersianDigits(group)}`}
+      onClose={onClose}
+      footer={<><Button onClick={onClose}>انصراف</Button><Button variant="primary" busy={busy} disabled={!valid} onClick={save}>ثبت زمان‌بندی</Button></>}
+    >
+      <p className="text-[13px] leading-relaxed text-ink-2">
+        مرحله‌هایی که هنوز باز نشده‌اند به ترتیب و بدون نیاز به دکمه باز می‌شوند. زمان با ساعت دستگاه شما (ایران) است. زمان‌بندی قبلی جایگزین می‌شود.
+      </p>
+      <Field label="زمان باز شدن اولین مرحله‌ی باقی‌مانده">
+        <input type="datetime-local" className={`${inputClass} text-left`} dir="ltr" value={start} onChange={(e) => setStart(e.target.value)} />
+      </Field>
+      <Field label="فاصله‌ی بین مرحله‌ها (دقیقه)">
+        <input className={`${inputClass} text-left`} dir="ltr" inputMode="numeric" value={every} onChange={(e) => setEvery(e.target.value)} />
+      </Field>
+      {times.length > 0 && (
+        <ul className="space-y-1 rounded-xl border border-line p-3 text-xs text-ink-2">
+          {left.map((s, i) => (
+            <li key={s.id} className="flex justify-between gap-3">
+              <span>{s.title}</span>
+              <span className="font-extrabold text-ink">{new Date(times[i]).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ErrorNote message={error} />
+    </Dialog>
   );
 };
 

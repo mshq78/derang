@@ -96,6 +96,13 @@ const ADMIN_SCHEMA: string[] = [
 ];
 
 // The bus-trip game: which group a member belongs to, which stages are open, and what each member did.
+const TRIP_SCHEDULE_TABLE = `CREATE TABLE IF NOT EXISTS trip_schedule (
+  group_name text NOT NULL,
+  stage_id text NOT NULL,
+  open_at timestamptz NOT NULL,
+  PRIMARY KEY (group_name, stage_id)
+)`;
+
 const TRIP_SCHEMA: string[] = [
   'ALTER TABLE users ADD COLUMN IF NOT EXISTS trip_group text',
   `CREATE TABLE IF NOT EXISTS trip_stage_opens (
@@ -112,6 +119,7 @@ const TRIP_SCHEMA: string[] = [
     PRIMARY KEY (user_id, task_id)
   )`,
   'CREATE INDEX IF NOT EXISTS trip_progress_done_idx ON trip_progress (done_at)',
+  TRIP_SCHEDULE_TABLE,
 ];
 
 let ready: Promise<void> | null = null;
@@ -174,6 +182,19 @@ const TRIP_VIDEOS = [
 async function runOnceMigrations(): Promise<void> {
   const db = getDb();
   await db.query('CREATE TABLE IF NOT EXISTS migrations (id text PRIMARY KEY, at timestamptz NOT NULL DEFAULT now())');
+  // Stages open by themselves at set times: 11:30, 13:00, 14:30, 16:00, 17:30 and 19:00 (Iran time,
+  // UTC+3:30) on 5 Oct 2026 for group 1. Changeable from the admin panel (Trip control).
+  await once('2026-10-trip-schedule-g1', async () => {
+    const db = getDb();
+    await db.query(TRIP_SCHEDULE_TABLE);
+    const times = ['08:00', '09:30', '11:00', '12:30', '14:00', '15:30'];
+    for (let i = 0; i < times.length; i++) {
+      await db.query(
+        `INSERT INTO trip_schedule (group_name, stage_id, open_at) VALUES ('1', $1, $2::timestamptz) ON CONFLICT DO NOTHING`,
+        [`s${i + 1}`, `2026-10-05T${times[i]}:00Z`]
+      );
+    }
+  });
   await once('2026-10-trip-adjustments', async () => {
     await db.query(`CREATE TABLE IF NOT EXISTS trip_adjustments (
       id bigserial PRIMARY KEY,

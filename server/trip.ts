@@ -17,7 +17,18 @@ interface GroupData {
   members: { id: string; name: string; rows: TaskRow[]; lastLoginAt: number | null; adjust: number }[];
 }
 
+/** Opens the stages whose scheduled time has come (their opening time is the scheduled time). */
+async function applySchedule(group: string) {
+  await getDb().query(
+    `INSERT INTO trip_stage_opens (group_name, stage_id, opened_at)
+     SELECT group_name, stage_id, open_at FROM trip_schedule WHERE group_name = $1 AND open_at <= now()
+     ON CONFLICT DO NOTHING`,
+    [group]
+  );
+}
+
 async function loadGroup(group: string): Promise<GroupData> {
+  await applySchedule(group);
   const db = getDb();
   const [openRows, users, progress, adjustments] = await Promise.all([
     db.query('SELECT stage_id, opened_at FROM trip_stage_opens WHERE group_name = $1', [group]),
@@ -169,6 +180,9 @@ export async function answerQuestion(user: PublicUser, body: unknown) {
 export async function adminTrip(group: string) {
   const data = await loadGroup(group);
   const scored = scoreGroup(data);
+  const schedule = new Map(
+    (await getDb().query('SELECT stage_id, open_at FROM trip_schedule WHERE group_name = $1', [group])).map((r) => [r.stage_id as string, new Date(r.open_at as string).getTime()])
+  );
   return {
     group,
     now: Date.now(),
@@ -178,6 +192,7 @@ export async function adminTrip(group: string) {
       title: s.title,
       subtitle: s.subtitle,
       openedAt: data.opened[s.id] ?? null,
+      scheduledAt: schedule.get(s.id) ?? null,
       done: scored.filter((x) => x.s.stages[s.id].complete).length,
     })),
     members: scored.map((x, i) => ({
@@ -218,7 +233,32 @@ export async function undoLastOpen(group: string) {
     [group]
   );
   if (!row) throw conflict('مرحله‌ی بازی برای بازگرداندن نیست.');
+  // A schedule entry that is already due would open it again at once.
+  await getDb().query('DELETE FROM trip_schedule WHERE group_name = $1 AND stage_id = $2 AND open_at <= now()', [group, row.stage_id]);
   return STAGES.find((s) => s.id === row.stage_id) ?? null;
+}
+
+/** Sets automatic opening of the stages not yet open: the first at `startAt`, then one every `everyMinutes`. */
+export async function setSchedule(group: string, body: unknown) {
+  const { startAt, everyMinutes } = (body ?? {}) as { startAt?: unknown; everyMinutes?: unknown };
+  const start = typeof startAt === 'string' ? new Date(startAt).getTime() : NaN;
+  const step = typeof everyMinutes === 'number' ? everyMinutes : NaN;
+  if (!Number.isFinite(start)) throw badRequest('زمان شروع نامعتبر است.');
+  if (!Number.isInteger(step) || step < 1 || step > 24 * 60) throw badRequest('فاصله‌ی بین مرحله‌ها نامعتبر است.');
+  const db = getDb();
+  const opened = new Set((await db.query('SELECT stage_id FROM trip_stage_opens WHERE group_name = $1', [group])).map((r) => r.stage_id as string));
+  await db.query('DELETE FROM trip_schedule WHERE group_name = $1', [group]);
+  let n = 0;
+  for (const stage of STAGES) {
+    if (opened.has(stage.id)) continue;
+    await db.query('INSERT INTO trip_schedule (group_name, stage_id, open_at) VALUES ($1, $2, $3::timestamptz)', [group, stage.id, new Date(start + n * step * 60_000).toISOString()]);
+    n++;
+  }
+  return n;
+}
+
+export async function clearSchedule(group: string) {
+  await getDb().query('DELETE FROM trip_schedule WHERE group_name = $1', [group]);
 }
 
 export type { Score };

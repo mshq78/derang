@@ -124,13 +124,16 @@ export interface TripAdmin {
   group: string;
   now: number;
   opened: Record<string, number>;
-  stages: { id: string; title: string; subtitle: string; openedAt: number | null; done: number }[];
+  stages: { id: string; title: string; subtitle: string; openedAt: number | null; scheduledAt: number | null; done: number }[];
   members: { id: string; rank: number; name: string; points: number; adjust: number; badges: number; stagesDone: number; everLoggedIn: boolean }[];
   total: number;
 }
 
 export const fetchTrip = (group: string) => get<TripAdmin>(`/api/admin/trip?group=${group}`);
 export const openNextTripStage = (group: string) => send<TripAdmin>('POST', `/api/admin/trip/open?group=${group}`);
+export const setTripSchedule = (group: string, startAt: string, everyMinutes: number) =>
+  send<TripAdmin>('POST', `/api/admin/trip/schedule?group=${group}`, { startAt, everyMinutes });
+export const clearTripSchedule = (group: string) => send<TripAdmin>('DELETE', `/api/admin/trip/schedule?group=${group}`);
 export const undoTripStage = (group: string) => send<TripAdmin>('POST', `/api/admin/trip/undo?group=${group}`);
 
 export interface PointAdjustment {

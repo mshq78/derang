@@ -2,7 +2,7 @@ import { audit, listAudit } from './audit.js';
 import { AdminSession, login, logout, publicAdmin, require as requirePermission, requireAdmin } from './auth.js';
 import { dashboard } from './dashboard.js';
 import { createMember, deleteMember, importMembers, listMembers, updateMember } from './people.js';
-import { adjustPoints, adminTrip, answerQuestion, listAdjustments, completeTask, isGroup, openNextStage, submitTest, tripState, undoLastOpen } from './trip.js';
+import { adjustPoints, adminTrip, clearSchedule, setSchedule, answerQuestion, listAdjustments, completeTask, isGroup, openNextStage, submitTest, tripState, undoLastOpen } from './trip.js';
 import { createStaff, deleteStaff, listStaff, updateStaff } from './staff.js';
 import {
   createItem,
@@ -347,6 +347,16 @@ async function adminTripRoute(request: Request, method: string, route: string[],
   if (route.length === 1 && route[0] === 'undo' && method === 'POST') {
     const stage = await undoLastOpen(group);
     await audit(admin, 'باز شدن مرحله‌ی سفر برگردانده شد', `گروه ${group}`, stage?.title ?? '');
+    return json(await adminTrip(group));
+  }
+  if (route.length === 1 && route[0] === 'schedule' && method === 'POST') {
+    const count = await setSchedule(group, await readJson(request));
+    await audit(admin, 'زمان‌بندی باز شدن مرحله‌ها تنظیم شد', `گروه ${group}`, `${count} مرحله`);
+    return json(await adminTrip(group));
+  }
+  if (route.length === 1 && route[0] === 'schedule' && method === 'DELETE') {
+    await clearSchedule(group);
+    await audit(admin, 'زمان‌بندی باز شدن مرحله‌ها لغو شد', `گروه ${group}`, '');
     return json(await adminTrip(group));
   }
   if (route.length === 1 && route[0] === 'adjust' && method === 'POST') {
