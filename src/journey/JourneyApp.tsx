@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ChevronLeft, Lock, LogOut, Trophy, WifiOff } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, HelpCircle, Lock, LogOut, Trophy, WifiOff } from 'lucide-react';
 import { useContent } from '../context/ContentContext';
 import { BADGES, STAGES } from '../data/journey';
 import { bodyTaskId, fetchTripState, flushOutbox, loadOutbox, type TripState } from '../lib/trip';
@@ -11,6 +11,7 @@ import { BrandMark } from '../components/BrandMark';
 import { useBackLayer } from '../hooks/useBackLayer';
 import { RouteMap } from './RouteMap';
 import { StageView } from './StageView';
+import { GuideContent, GuideSheet } from './Guide';
 
 const POLL_MS = 12_000;
 
@@ -39,6 +40,7 @@ export const JourneyApp: React.FC<{
     }
   });
   const [openStage, setOpenStage] = useState<string | null>(null);
+  const [showGuide, setShowGuide] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
   const prevPoints = useRef<number | null>(null);
@@ -199,6 +201,9 @@ export const JourneyApp: React.FC<{
                 )}
               </span>
             )}
+            <button type="button" onClick={() => setShowGuide(true)} className="flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-xs font-bold text-ink-2 hover:bg-surface-2">
+              <HelpCircle className="h-3.5 w-3.5" /> راهنما
+            </button>
             <button type="button" onClick={logout} disabled={leaving} aria-label="خروج" className="rounded-lg p-1.5 text-ink-3 hover:bg-surface-2 hover:text-ink disabled:opacity-50">
               <LogOut className="h-4 w-4" />
             </button>
@@ -210,6 +215,8 @@ export const JourneyApp: React.FC<{
           </div>
         )}
       </header>
+
+      {showGuide && <GuideSheet onClose={() => setShowGuide(false)} />}
 
       <main className="mx-auto max-w-lg space-y-4 px-4 py-5">
         {banner && (
@@ -237,14 +244,11 @@ export const JourneyApp: React.FC<{
             <section className="overflow-hidden rounded-3xl border border-line bg-surface p-4 shadow-sm">
               <RouteMap stages={STAGES.length} position={position} openStops={openStops} doneStops={doneStops} />
               {!boarded ? (
-                <div className="mt-2 space-y-3 text-center">
+                <div className="mt-2 space-y-2 text-center">
                   <p className="text-base font-extrabold text-ink">به سفر درنگ خوش آمدید</p>
                   <p className="text-[13px] leading-relaxed text-ink-3">
-                    در این مسیر، هر مرحله که باز شود یک کار کوتاه دارد. هرچه کارها را انجام دهید امتیاز می‌گیرید.
+                    قبل از شروع، چند دقیقه راهنما و قوانین را بخوانید؛ پایین همین صفحه است.
                   </p>
-                  <button type="button" onClick={board} className="w-full rounded-2xl bg-primary py-3 text-sm font-extrabold text-surface shadow-md active:scale-[0.98]">
-                    سوار شدم؛ شروع سفر
-                  </button>
                 </div>
               ) : !state.started ? (
                 <p className="mt-2 text-center text-[13px] font-bold text-ink-2">منتظر اعلام شروع سفر باشید؛ همین صفحه را باز نگه دارید.</p>
@@ -252,6 +256,15 @@ export const JourneyApp: React.FC<{
                 <p className="mt-2 text-center text-sm font-extrabold text-success-ink">همه‌ی مرحله‌های باز شده را انجام دادید. آفرین!</p>
               ) : null}
             </section>
+
+            {!boarded && (
+              <>
+                <GuideContent />
+                <button type="button" onClick={board} className="w-full rounded-2xl bg-primary py-3.5 text-sm font-extrabold text-surface shadow-md active:scale-[0.98]">
+                  خواندم؛ سوار شدم، شروع سفر
+                </button>
+              </>
+            )}
 
             <OfflineCard items={offlineItems} />
 
