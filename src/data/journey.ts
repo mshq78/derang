@@ -48,6 +48,8 @@ export interface StageDef {
 export const POINTS = { test: 5, cards: 5, quiz: 4 } as const;
 /** Finishing a part with the self-confirm button (no listening, watching or reading) earns this share of its points. */
 export const CONFIRM_SHARE = 0.4;
+/** Speed bonus per stage: the first to finish it gets this many points, each next place one less, down to none. */
+export const SPEED_MAX = 8;
 
 export const CHARACTERS = [
   { id: 'davinci', name: 'لئوناردو داوینچی' },

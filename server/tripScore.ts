@@ -1,4 +1,4 @@
-import { BADGES, CHARACTERS, CONFIRM_SHARE, POINTS, STAGES, taskId, type StageDef } from '../src/data/journey.js';
+import { BADGES, CHARACTERS, CONFIRM_SHARE, POINTS, SPEED_MAX, STAGES, taskId, type StageDef } from '../src/data/journey.js';
 import { ANSWERS } from './tripAnswers.js';
 
 export interface TaskRow {
@@ -13,6 +13,10 @@ export interface StageScore {
   complete: boolean;
   /** When the last required part was finished (first done time of each part). */
   completedAt: number | null;
+  /** When the stage counted as finished for the speed bonus (parts done and every question answered, no self-confirm); null if not eligible. */
+  finishedAt: number | null;
+  /** Speed bonus already included in `points` (set by addSpeedPoints). */
+  speed: number;
 }
 
 export interface Score {
@@ -22,6 +26,8 @@ export interface Score {
   /** Correct quiz answers in total and when the last stage was finished: tie-breakers on the board. */
   /** Part of `points` that came from badges. */
   badgePoints: number;
+  /** Part of `points` that came from finishing stages earlier than others. */
+  speedPoints: number;
   correct: number;
   lastAt: number | null;
 }
@@ -41,18 +47,20 @@ const groupFirstDone = (stage: StageDef, rows: Map<string, TaskRow>) =>
 /** Pure scoring: points and badges from a member's task rows and the stage opening times (epoch ms). */
 export function score(rowsList: TaskRow[], opened: Record<string, number>, adjustment = 0): Score {
   const rows = new Map(rowsList.map((r) => [r.task_id, r]));
-  const result: Score = { points: 0, stages: {}, badges: [], badgePoints: 0, correct: 0, lastAt: null };
+  const result: Score = { points: 0, stages: {}, badges: [], badgePoints: 0, speedPoints: 0, correct: 0, lastAt: null };
 
   for (const stage of STAGES) {
     let points = 0;
     const partTimes: number[] = [];
     let allParts = true;
+    let selfConfirmed = false;
 
     for (const { group, done, mediaDone, confirmOnly } of groupFirstDone(stage, rows)) {
       if (done.length === 0) {
         allParts = false;
         continue;
       }
+      if (confirmOnly) selfConfirmed = true;
       points += confirmOnly ? Math.round(group.base * CONFIRM_SHARE) : group.base + (mediaDone > 1 ? group.bonus : 0);
       partTimes.push(Math.min(...done.map((d) => d.done_at)));
       if (mediaDone > 1 && group.bonus > 0 && !result.badges.includes(`both:${stage.id}`)) result.badges.push(`both:${stage.id}`);
@@ -68,9 +76,14 @@ export function score(rowsList: TaskRow[], opened: Record<string, number>, adjus
     }
 
     let correct = 0;
+    let answered = 0;
+    let lastAnswerAt = 0;
     for (const q of stage.quiz) {
       const row = rows.get(taskId.quiz(stage.id, q.id));
-      if (row && row.meta.correct === true) correct++;
+      if (!row) continue;
+      answered++;
+      lastAnswerAt = Math.max(lastAnswerAt, row.done_at);
+      if (row.meta.correct === true) correct++;
     }
     // Answers earn points only once the parts above them are done, so answering alone does not pay.
     const complete = allParts && stage.groups.length + (stage.special?.length ?? 0) > 0;
@@ -80,7 +93,8 @@ export function score(rowsList: TaskRow[], opened: Record<string, number>, adjus
     }
 
     const completedAt = complete ? Math.max(...partTimes) : null;
-    result.stages[stage.id] = { id: stage.id, points, complete, completedAt };
+    const finishedAt = complete && !selfConfirmed && answered === stage.quiz.length ? Math.max(completedAt!, lastAnswerAt) : null;
+    result.stages[stage.id] = { id: stage.id, points, complete, completedAt, finishedAt, speed: 0 };
     result.points += points;
     if (completedAt !== null) result.lastAt = Math.max(result.lastAt ?? 0, completedAt);
 
@@ -111,3 +125,23 @@ export const byRank = <T extends { s: Score; name: string }>(a: T, b: T) =>
   b.s.correct - a.s.correct ||
   (a.s.lastAt ?? Infinity) - (b.s.lastAt ?? Infinity) ||
   a.name.localeCompare(b.name, 'fa');
+
+/**
+ * Speed bonus: for each stage, those who finished it (parts done, every question answered, no
+ * self-confirm) are ordered by finishing time; the first gets SPEED_MAX points, each next place one
+ * less, down to none. A person's place depends only on who finished before them.
+ */
+export function addSpeedPoints(entries: { id: string; s: Score }[]) {
+  for (const stage of STAGES) {
+    const finished = entries
+      .filter((e) => e.s.stages[stage.id].finishedAt !== null)
+      .sort((a, b) => a.s.stages[stage.id].finishedAt! - b.s.stages[stage.id].finishedAt! || a.id.localeCompare(b.id));
+    finished.forEach((e, i) => {
+      const bonus = Math.max(0, SPEED_MAX - i);
+      e.s.stages[stage.id].speed = bonus;
+      e.s.stages[stage.id].points += bonus;
+      e.s.speedPoints += bonus;
+      e.s.points += bonus;
+    });
+  }
+}

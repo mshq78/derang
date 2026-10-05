@@ -15,6 +15,7 @@ export interface StageScoreView {
   points: number;
   complete: boolean;
   completedAt: number | null;
+  speed?: number;
 }
 
 export interface TripState {
@@ -29,6 +30,7 @@ export interface TripState {
     of: number;
     badges: string[];
     badgePoints?: number;
+    speedPoints?: number;
     stages: Record<string, StageScoreView>;
   } | null;
   top?: { rank: number; name: string; points: number; badges: number; me?: boolean }[];

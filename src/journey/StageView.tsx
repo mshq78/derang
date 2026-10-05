@@ -8,6 +8,7 @@ import { bodyTaskId, completeOrQueue, type CompleteBody, type TripState } from '
 import { TrackedAudio } from './TrackedAudio';
 import { TrackedVideo } from './TrackedVideo';
 import { JOURNEY_TEXTS } from '../data/journeyTexts';
+import { toPersianDigits as toFa } from '../utils/helpers';
 import { CardsTask, Quiz, TextPanel, TestTask, TourTask } from './tasks';
 
 interface ContentSlice {
@@ -68,6 +69,12 @@ export const StageView: React.FC<{
         </div>
       ) : (
         <>
+          {state.me?.stages[stage.id]?.complete && (
+            <p role="status" className="rounded-2xl bg-success-soft px-4 py-3 text-[13px] font-bold text-success-ink">
+              این مرحله را کامل کردید. امتیاز مرحله: {toFa(state.me.stages[stage.id].points)}
+              {(state.me.stages[stage.id].speed ?? 0) > 0 && ` (شامل ${toFa(state.me.stages[stage.id].speed ?? 0)} امتیاز سرعت)`}
+            </p>
+          )}
           {stage.special && <StepsOverview stage={stage} done={done} />}
           {stage.groups.map((group) => {
             const available = group.items

@@ -2,7 +2,7 @@ import { getDb } from './db.js';
 import { ApiError, badRequest, conflict, notFound } from './http.js';
 import { CHARACTERS, STAGES, taskId } from '../src/data/journey.js';
 import { WHY } from './tripAnswers.js';
-import { byRank, correctIndex, isCharacter, score, type Score, type TaskRow } from './tripScore.js';
+import { addSpeedPoints, byRank, correctIndex, isCharacter, score, type Score, type TaskRow } from './tripScore.js';
 import type { PublicUser } from './userAuth.js';
 
 const GROUPS = ['1', '2'];
@@ -61,12 +61,19 @@ async function loadGroup(group: string): Promise<GroupData> {
   };
 }
 
+/** Everyone's score, with the speed bonus, best first. */
+function scoreGroup(data: Awaited<ReturnType<typeof loadGroup>>) {
+  const scored = data.members.map((m) => ({ m, s: score(m.rows, data.opened, m.adjust) }));
+  addSpeedPoints(scored.map((x) => ({ id: x.m.id, s: x.s })));
+  scored.sort((a, b) => byRank({ s: a.s, name: a.m.name }, { s: b.s, name: b.m.name }));
+  return scored;
+}
+
 export async function tripState(user: PublicUser) {
   const group = user.tripGroup;
   if (!isGroup(group)) return { group: null };
   const data = await loadGroup(group);
-  const scored = data.members.map((m) => ({ m, s: score(m.rows, data.opened, m.adjust) }));
-  scored.sort((a, b) => byRank({ s: a.s, name: a.m.name }, { s: b.s, name: b.m.name }));
+  const scored = scoreGroup(data);
   const mine = scored.find((x) => x.m.id === user.id);
   const myRows = mine?.m.rows ?? [];
   const rank = mine ? scored.findIndex((x) => x.m.id === user.id) + 1 : null;
@@ -91,7 +98,7 @@ export async function tripState(user: PublicUser) {
         ];
       })
     ),
-    me: mine ? { points: mine.s.points, rank, of: scored.length, badges: mine.s.badges, badgePoints: mine.s.badgePoints, stages: mine.s.stages } : null,
+    me: mine ? { points: mine.s.points, rank, of: scored.length, badges: mine.s.badges, badgePoints: mine.s.badgePoints, speedPoints: mine.s.speedPoints, stages: mine.s.stages } : null,
     top: scored.slice(0, 10).map((x, i) => ({ rank: i + 1, name: x.m.name, points: x.s.points, badges: x.s.badges.length, me: x.m.id === user.id })),
   };
 }
@@ -161,8 +168,7 @@ export async function answerQuestion(user: PublicUser, body: unknown) {
 
 export async function adminTrip(group: string) {
   const data = await loadGroup(group);
-  const scored = data.members.map((m) => ({ m, s: score(m.rows, data.opened, m.adjust) }));
-  scored.sort((a, b) => byRank({ s: a.s, name: a.m.name }, { s: b.s, name: b.m.name }));
+  const scored = scoreGroup(data);
   return {
     group,
     now: Date.now(),
